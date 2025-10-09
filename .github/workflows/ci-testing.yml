@@ -1,0 +1,76 @@
+name: CI testing
+
+# see: https://help.github.com/en/actions/reference/events-that-trigger-workflows
+on:
+  # Trigger the workflow on push or pull request, but only for the main branch
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "notebooks/**"
+      - "configs/**"
+      - "sweeps/**"
+      - "scripts/**"
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - "notebooks/**"
+      - "configs/**"
+      - "sweeps/**"
+      - "scripts/**"
+
+
+jobs:
+  pytest:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: [3.11]
+
+    # Timeout: https://stackoverflow.com/a/59076067/4521646
+    timeout-minutes: 35
+
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip' # caching pip dependencies
+
+
+
+    - name: Install dependencies
+      run: |
+        
+        pip install --requirement requirements.txt --upgrade --quiet
+        pip install --requirement tests/requirements.txt --quiet
+        
+        python --version
+        pip --version
+        pip list
+      shell: bash
+
+    - name: black
+      run: |
+        black --check --verbose ./rule_extrapolation/
+
+    - name: mypy
+      run: |
+        mypy rule_extrapolation --ignore-missing-imports --scripts-are-modules
+
+    - name: Tests
+      run: |
+        coverage run --source rule_extrapolation -m pytest tests -v --junitxml=junit/test-results-${{ runner.os }}-${{ matrix.python-version }}.xml
+
+    - name: Statistics
+      if: success()
+      run: |
+        coverage report

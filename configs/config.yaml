@@ -1,18 +1,17 @@
 seed_everything: true
+
 trainer:
-  logger:
-    class_path: pytorch_lightning.loggers.WandbLogger
-    init_args:
-      entity: rule-extrapolation-learning
-      log_model: False
-      project: rule_extrapolation
-      save_dir:
-      offline: false
-  accelerator: auto
   strategy: auto
-  devices: auto
   num_nodes: 1
-  precision: null
+  accelerator: cpu
+  devices: 1
+  precision: 32
+  num_sanity_val_steps: 0
+  use_distributed_sampler: false
+  # optional for faster debugging:
+  detect_anomaly: false
+  log_every_n_steps: 1
+
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
@@ -20,43 +19,24 @@ trainer:
         verbose: true
         save_top_k: 1
         mode: min
+
     - class_path: pytorch_lightning.callbacks.EarlyStopping
       init_args:
         monitor: Val/loss
         patience: 25
         mode: min
+
   fast_dev_run: false
   max_epochs: 5000
-  min_epochs: null
-  max_steps: -1
-  min_steps: null
-  max_time: null
-  limit_train_batches: null
-  limit_val_batches: null
-  limit_test_batches: null
-  limit_predict_batches: null
-  overfit_batches: 0.0
-  val_check_interval: null
   check_val_every_n_epoch: 250
-  num_sanity_val_steps: null
-  log_every_n_steps: null
-  enable_checkpointing: null
-  enable_progress_bar: null
-  enable_model_summary: null
-  accumulate_grad_batches: 1
-  gradient_clip_val: null
-  gradient_clip_algorithm: null
-  deterministic: null
-  benchmark: null
-  inference_mode: true
-  use_distributed_sampler: true
-  profiler: null
-  detect_anomaly: false
-  barebones: false
-  plugins: null
-  sync_batchnorm: false
-  reload_dataloaders_every_n_epochs: 0
-  default_root_dir: null
+
+  num_sanity_val_steps: 0      # ✅ avoids MPS warmup crash
+  enable_progress_bar: true
+  enable_model_summary: true
+  enable_checkpointing: true
+  detect_anomaly: true
+  use_distributed_sampler: false
+
 model:
   num_tokens: 6
   dim_model: 8
@@ -69,6 +49,7 @@ model:
   lr: 0.01
   layer_norm_eps: 2e-4
   model: transformer
+
 data:
   num_train: 512
   num_val: 512
@@ -76,6 +57,7 @@ data:
   max_length: 512
   batch_size: 128
   grammar: aNbNcN
+
 notes: null
 tags: null
 ckpt_path: null

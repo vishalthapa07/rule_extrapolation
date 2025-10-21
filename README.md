@@ -104,6 +104,8 @@ wandb sweep sweeps/<configFile>.yaml
 # run sweep
 ./scripts/sweeps <sweepId>
 ```
+to run without GPU 
+python rule_extrapolation/cli.py fit --config configs/config.yaml --trainer.accelerator=cpu
 
 ## Citation
 

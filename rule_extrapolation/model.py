@@ -112,6 +112,10 @@ class TransformerDecoder(nn.Module):
         self.decoder = nn.TransformerEncoder(layer, num_decoder_layers)
 
         self.out = nn.Linear(dim_model, num_tokens)
+        
+        # Ensure all submodules are on the correct device
+        if torch.backends.mps.is_available():
+            self.to(torch.device("mps"))
 
     def forward(self, src, mask=None, src_key_padding_mask=None):
         # Src size must be (batch_size, src sequence length)
@@ -134,6 +138,10 @@ class TransformerDecoder(nn.Module):
         )
         out = self.out(transformer_out)
         return out.permute(1, 2, 0)
+    
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        return self
 
 
 class LinearLLM(nn.Module):

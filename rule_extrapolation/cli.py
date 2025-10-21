@@ -1,5 +1,7 @@
+import pytorch_lightning as pl
 from pytorch_lightning.cli import LightningCLI
-
+from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from rule_extrapolation.datamodule import GrammarDataModule
 from rule_extrapolation.runner import LightningGrammarModule
 
@@ -30,5 +32,8 @@ if __name__ == "__main__":
         LightningGrammarModule,
         GrammarDataModule,
         save_config_callback=None,
-        run=True,
     )
+
+    # Parse the CLI arguments and run the trainer
+
+    cli.trainer.fit(cli.model, datamodule=cli.datamodule)

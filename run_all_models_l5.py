@@ -11,7 +11,18 @@ import math
 import numpy as np
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
-from pytorch_lightning.utilities.seed import seed_everything
+
+# Handle different PyTorch Lightning versions
+try:
+    # PyTorch Lightning 2.0+
+    from pytorch_lightning.utilities import seed_everything
+except ImportError:
+    try:
+        # PyTorch Lightning 1.x
+        from pytorch_lightning.utilities.seed import seed_everything
+    except ImportError:
+        # Lightning (new package name in some versions)
+        from lightning.utilities import seed_everything
 from omegaconf import OmegaConf
 import time
 from collections import defaultdict

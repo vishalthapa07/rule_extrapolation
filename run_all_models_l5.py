@@ -8,7 +8,7 @@ import sys
 import os
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 from omegaconf import OmegaConf
 import time
 
@@ -23,7 +23,130 @@ def convert_to_float(value):
     return float(value)
 
 
-def train_and_evaluate_model(model_name, config_base, datamodule_config):
+def get_chance_model_results():
+    """Return chance/baseline model results for aNbNcN grammar."""
+    return {
+        "model": "Chance",
+        "test_loss": float("inf"),  # N/A
+        "id_r1": 0.022,
+        "id_r2": 0.454,
+        "ood_r1": 0.003,
+        "ood_r2_completion": 0.593,
+        "time": 0.0,
+    }
+
+
+class PeriodicEvaluationCallback(Callback):
+    """Callback to evaluate and print results at specific epochs."""
+
+    def __init__(
+        self,
+        datamodule,
+        evaluation_epochs=[100, 200, 300, 400, 500],
+        model_name="",
+        global_results_store=None,
+    ):
+        super().__init__()
+        self.datamodule = datamodule
+        self.evaluation_epochs = evaluation_epochs
+        self.model_name = model_name
+        self.results_store = {}
+        self.global_results_store = (
+            global_results_store  # Shared store across all models
+        )
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        """Evaluate at specified epochs."""
+        current_epoch = trainer.current_epoch + 1  # epochs are 0-indexed
+
+        if current_epoch in self.evaluation_epochs:
+            print(f"\n{'='*80}")
+            print(f"Evaluating {self.model_name} at epoch {current_epoch}")
+            print(f"{'='*80}")
+
+            # Setup test datamodule
+            self.datamodule.setup("test")
+
+            # Evaluate
+            pl_module.eval()
+            pl_module.freeze()
+
+            test_dl = self.datamodule.test_dataloader()
+
+            # Calculate test loss
+            total_loss = 0.0
+            num_batches = 0
+            with torch.no_grad():
+                for batch in test_dl:
+                    try:
+                        _, _, _, loss = pl_module._forward(batch)
+                        total_loss += convert_to_float(loss)
+                        num_batches += 1
+                        if num_batches >= 10:  # Limit for speed
+                            break
+                    except Exception as e:
+                        print(f"Error calculating loss: {e}")
+                        break
+
+            test_loss = total_loss / num_batches if num_batches > 0 else float("inf")
+
+            # Evaluate prompt predictions
+            try:
+                (
+                    prompts,
+                    metrics,
+                    prompts_finished,
+                    metrics_finished,
+                    ood_prompts,
+                    ood_metrics,
+                    ood_prompts_finished,
+                    ood_metrics_finished,
+                    sos_prompts,
+                    sos_metrics,
+                    sos_prompts_finished,
+                    sos_metrics_finished,
+                ) = pl_module.eval_prompt_prediction()
+
+                id_r1 = convert_to_float(metrics.rule_1_accuracy)
+                id_r2 = convert_to_float(metrics.rule_2_accuracy)
+                ood_r1 = convert_to_float(ood_metrics.rule_1_accuracy)
+                ood_r2_completion = convert_to_float(
+                    ood_metrics.rule_2_completion_accuracy
+                )
+            except Exception as e:
+                print(f"Error evaluating prompts: {e}")
+                id_r1 = id_r2 = ood_r1 = ood_r2_completion = 0.0
+
+            # Store results locally
+            result = {
+                "model": self.model_name,
+                "test_loss": test_loss,
+                "id_r1": id_r1,
+                "id_r2": id_r2,
+                "ood_r1": ood_r1,
+                "ood_r2_completion": ood_r2_completion,
+            }
+            self.results_store[current_epoch] = result
+
+            # Store in global results store
+            if self.global_results_store is not None:
+                if current_epoch not in self.global_results_store:
+                    self.global_results_store[current_epoch] = []
+                self.global_results_store[current_epoch].append(result)
+                print(f"Stored results for {self.model_name} at epoch {current_epoch}")
+
+            # Unfreeze for continued training
+            pl_module.unfreeze()
+            pl_module.train()
+
+
+def train_and_evaluate_model(
+    model_name,
+    config_base,
+    datamodule_config,
+    evaluation_epochs=None,
+    global_results_store=None,
+):
     """Train and evaluate a single model."""
     print(f"\n{'='*80}")
     print(f"Training {model_name.upper()} model...")
@@ -140,9 +263,9 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         print(f"Error creating {model_name} model: {e}")
         if "CUDA" in str(e) or "cuda" in str(e).lower():
             print(f"  Note: {model_name} may require CUDA. Skipping...")
-        return None
+        return None, None
 
-    # Setup trainer
+    # Setup callbacks
     checkpoint_callback = ModelCheckpoint(
         monitor="Val/loss",
         mode="min",
@@ -151,12 +274,25 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         verbose=False,
     )
 
+    callbacks = [checkpoint_callback]
+
+    # Add periodic evaluation callback if epochs are specified
+    periodic_callback = None
+    if evaluation_epochs:
+        periodic_callback = PeriodicEvaluationCallback(
+            datamodule=datamodule,
+            evaluation_epochs=evaluation_epochs,
+            model_name=model_name,
+            global_results_store=global_results_store,
+        )
+        callbacks.append(periodic_callback)
+
     trainer = Trainer(
         max_epochs=config.trainer.max_epochs,
         limit_train_batches=config.trainer.limit_train_batches,
         limit_val_batches=config.trainer.limit_val_batches,
         check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks,
         logger=False,
         enable_progress_bar=False,  # Disable to reduce output
         enable_model_summary=False,
@@ -172,7 +308,7 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         model = trainer.model
     except Exception as e:
         print(f"Error training {model_name}: {e}")
-        return None
+        return None, None
 
     # Setup test datamodule
     datamodule.setup("test")
@@ -228,7 +364,7 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
     elapsed_time = time.time() - start_time
     print(f"{model_name} completed in {elapsed_time:.1f} seconds")
 
-    return {
+    final_result = {
         "model": model_name,
         "test_loss": test_loss,
         "id_r1": id_r1,
@@ -238,29 +374,50 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         "time": elapsed_time,
     }
 
+    return final_result, periodic_callback.results_store if periodic_callback else {}
 
-def print_combined_results_table(results_list):
+
+def print_combined_results_table(results_list, epoch=None, include_chance=True):
     """Print combined results table for all models."""
     print("\n" + "=" * 100)
-    print(
-        "Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}: the Transformer can extrapolate (R1) the best"
-    )
+    if epoch:
+        print(
+            f"Table 6 (Epoch {epoch}): Test loss and rule-following accuracies for the context-sensitive language L5 = {{a^n b^n c^n}}: the Transformer can extrapolate (R1) the best"
+        )
+    else:
+        print(
+            "Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}: the Transformer can extrapolate (R1) the best"
+        )
     print("=" * 100)
+    # Adjust column widths to match the formatted output
     print(
-        f"{'Model':<15} {'Test loss':<20} {'ID R1':<15} {'ID R2':<15} {'OOD R1':<15} {'OOD R2 completion':<20}"
+        f"{'Model':<15} {'Test loss':<20} {'ID R1':<18} {'ID R2':<18} {'OOD R1':<18} {'OOD R2 completion':<20}"
     )
     print("-" * 100)
 
-    # Model order as in the image - show only models that have results
-    model_order = ["Transformer", "Linear", "LSTM", "Mamba", "xLSTM"]
+    # Model order as in the image - include Chance first
+    model_order = ["Chance", "Linear", "LSTM", "Mamba", "Transformer", "xLSTM"]
+
+    # Add chance model if requested
+    if include_chance:
+        chance_results = get_chance_model_results()
+        results_list_with_chance = [chance_results] + results_list
+    else:
+        results_list_with_chance = results_list
 
     # Filter to only show models with results
-    available_models = [r["model"] for r in results_list if r is not None]
+    available_models = [r["model"] for r in results_list_with_chance if r is not None]
+
+    # Find best values for bolding
+    best_ood_r1 = -1
+    for r in results_list_with_chance:
+        if r and r.get("ood_r1", 0) > best_ood_r1:
+            best_ood_r1 = r.get("ood_r1", 0)
 
     for model_name in model_order:
         # Find results for this model
         model_results = None
-        for r in results_list:
+        for r in results_list_with_chance:
             if r and r["model"].lower() == model_name.lower():
                 model_results = r
                 break
@@ -276,20 +433,43 @@ def print_combined_results_table(results_list):
             continue
 
         # Round values
-        test_loss = round(model_results["test_loss"], 3)
+        test_loss = model_results["test_loss"]
         id_r1 = round(model_results["id_r1"], 3)
         id_r2 = round(model_results["id_r2"], 3)
         ood_r1 = round(model_results["ood_r1"], 3)
         ood_r2 = round(model_results["ood_r2_completion"], 3)
 
         # Format test loss
-        if test_loss == float("inf") or test_loss == float("-inf"):
+        if test_loss == float("inf") or test_loss == float("-inf") or test_loss is None:
             loss_str = "N/A"
         else:
             loss_str = f"{test_loss:.3f}"
 
+        # Format values with 3 decimal places
+        id_r1_str = f"{id_r1:.3f}"
+        id_r2_str = f"{id_r2:.3f}"
+        ood_r1_str = f"{ood_r1:.3f}"
+        ood_r2_str = f"{ood_r2:.3f}"
+
+        # Mark best values with asterisk (for visual identification)
+        # Best OOD R1
+        if (
+            abs(ood_r1 - best_ood_r1) < 0.01
+            and best_ood_r1 > 0
+            and model_name.lower() != "chance"
+        ):
+            ood_r1_str = f"{ood_r1:.3f} *"
+
+        # Perfect scores (1.000)
+        if id_r1 >= 0.999:
+            id_r1_str = f"{id_r1:.3f} *"
+        if id_r2 >= 0.999:
+            id_r2_str = f"{id_r2:.3f} *"
+        if ood_r2 >= 0.999:
+            ood_r2_str = f"{ood_r2:.3f} *"
+
         print(
-            f"{model_name:<15} {loss_str:<20} {id_r1:.3f}            {id_r2:.3f}            {ood_r1:.3f}            {ood_r2:.3f}"
+            f"{model_name:<15} {loss_str:<20} {id_r1_str:<18} {id_r2_str:<18} {ood_r1_str:<18} {ood_r2_str:<20}"
         )
 
     print("=" * 100)
@@ -303,12 +483,12 @@ def main():
         "trainer": {
             "logger": False,
             "accelerator": "auto",
-            "max_epochs": 1000,
+            "max_epochs": 500,  # Increased to 500 epochs
             "limit_train_batches": None,
             "limit_val_batches": None,
-            "check_val_every_n_epoch": 50,
+            "check_val_every_n_epoch": 100,  # Check every 100 epochs
             "num_sanity_val_steps": 0,
-            "enable_progress_bar": True,
+            "enable_progress_bar": False,
             "enable_model_summary": False,
             "deterministic": False,
             "benchmark": True,
@@ -350,6 +530,9 @@ def main():
 
     datamodule_config = base_config["data"]
 
+    # Evaluation epochs (every 100 epochs)
+    evaluation_epochs = [100, 200, 300, 400, 500]
+
     # Models to run - include all models
     models = ["Transformer", "Linear", "LSTM"]
 
@@ -384,24 +567,50 @@ def main():
 
     # Store results
     all_results = []
+    global_results_store = {}  # Shared store for periodic evaluations across all models
     total_start_time = time.time()
+
+    # Print initial table with chance model only
+    print("\n" + "=" * 100)
+    print("Initial Results (Chance Baseline)")
+    print("=" * 100)
+    print_combined_results_table([], epoch=None, include_chance=True)
 
     # Run each model
     for model_name in models:
         try:
-            result = train_and_evaluate_model(
-                model_name, base_config, datamodule_config
+            result, periodic_results = train_and_evaluate_model(
+                model_name,
+                base_config,
+                datamodule_config,
+                evaluation_epochs=evaluation_epochs,
+                global_results_store=global_results_store,
             )
             if result:
                 all_results.append(result)
+
         except Exception as e:
             print(f"Failed to run {model_name}: {e}")
+            import traceback
+
+            traceback.print_exc()
             all_results.append(None)
 
     total_time = time.time() - total_start_time
 
-    # Print combined results table
-    print_combined_results_table(all_results)
+    # Print periodic results tables (after each 100 epochs)
+    print("\n" + "=" * 100)
+    print("PERIODIC EVALUATION RESULTS")
+    print("=" * 100)
+    for epoch in sorted(global_results_store.keys()):
+        epoch_results = global_results_store[epoch]
+        print_combined_results_table(epoch_results, epoch=epoch, include_chance=True)
+
+    # Print final combined results table (all models after 500 epochs)
+    print("\n" + "=" * 100)
+    print("Final Results (After 500 Epochs)")
+    print("=" * 100)
+    print_combined_results_table(all_results, epoch="Final (500)", include_chance=True)
 
     # Print summary
     print("\n" + "=" * 100)

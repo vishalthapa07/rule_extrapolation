@@ -151,10 +151,19 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         verbose=False,
     )
 
+    # Get trainer config with defaults
+    accelerator = config.trainer.get("accelerator", "gpu")
+    devices = config.trainer.get("devices", 1)
+    precision = config.trainer.get("precision", "16-mixed")
+
+    # Ensure devices is valid for the accelerator
+    if accelerator == "cpu" and devices is None:
+        devices = 1  # CPU requires devices to be an int > 0
+
     trainer = Trainer(
-        accelerator=config.trainer.get("accelerator", "gpu"),
-        devices=config.trainer.get("devices", 1),
-        precision=config.trainer.get("precision", "16-mixed"),
+        accelerator=accelerator,
+        devices=devices,
+        precision=precision,
         max_epochs=config.trainer.max_epochs,
         limit_train_batches=config.trainer.limit_train_batches,
         limit_val_batches=config.trainer.limit_val_batches,
@@ -315,7 +324,7 @@ def main():
         print("  For faster training, use Google Colab with GPU runtime.")
         print("  The script will continue with CPU...\n")
         accelerator = "cpu"
-        devices = None
+        devices = 1  # CPU requires devices to be an int > 0, not None
         precision = "32"
 
     # Base config with increased values for better accuracy

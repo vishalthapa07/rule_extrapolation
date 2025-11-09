@@ -6,23 +6,43 @@ for aNbNcN grammar (L5) and display results in a combined table format.
 
 import sys
 import os
+import random
 import torch
 import math
 import numpy as np
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 
-# Handle different PyTorch Lightning versions
+# Handle different PyTorch Lightning versions and provide fallback
 try:
-    # PyTorch Lightning 2.0+
-    from pytorch_lightning.utilities import seed_everything
+    # Try top-level import first (some versions)
+    from pytorch_lightning import seed_everything
 except ImportError:
     try:
-        # PyTorch Lightning 1.x
-        from pytorch_lightning.utilities.seed import seed_everything
+        # PyTorch Lightning 2.0+
+        from pytorch_lightning.utilities import seed_everything
     except ImportError:
-        # Lightning (new package name in some versions)
-        from lightning.utilities import seed_everything
+        try:
+            # PyTorch Lightning 1.x
+            from pytorch_lightning.utilities.seed import seed_everything
+        except ImportError:
+            # Fallback: implement seed_everything ourselves
+            def seed_everything(seed, workers=False):
+                """Set random seed for reproducibility.
+                Args:
+                    seed: Random seed value
+                    workers: Whether to set seed for workers (not used in fallback)
+                """
+                random.seed(seed)
+                np.random.seed(seed)
+                torch.manual_seed(seed)
+                torch.cuda.manual_seed_all(seed)
+                # Set deterministic behavior
+                torch.backends.cudnn.deterministic = True
+                torch.backends.cudnn.benchmark = False
+                os.environ["PYTHONHASHSEED"] = str(seed)
+
+
 from omegaconf import OmegaConf
 import time
 from collections import defaultdict

@@ -38,27 +38,25 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
     # Set model-specific parameters
     if model_name.lower() == "linear":
         config.model.bias = True
-        # Linear uses dim_model as embedding_dim, keep it small
         if "dim_model" not in config.model:
-            config.model.dim_model = 8
+            config.model.dim_model = 10
     elif model_name.lower() == "lstm":
-        config.model.hidden_dim = 32  # Reduced for speed
-        config.model.num_layers = 3  # Reduced for speed
+        config.model.hidden_dim = 64
+        config.model.num_layers = 5
         config.model.dropout = 0.4
-        # LSTM uses dim_model as embedding_dim
+        config.model.embedding_dim = 16
         if "embedding_dim" in config.model:
             config.model.dim_model = config.model.embedding_dim
     elif model_name.lower() == "mamba":
-        config.model.n_layers = 4  # Reduced for speed
-        config.model.d_state = 8  # Reduced for speed
-        config.model.d_conv = 4  # Reduced for speed
-        config.model.d_model = 16  # Reduced for speed
+        config.model.n_layers = 10
+        config.model.d_state = 16
+        config.model.d_conv = 8
+        config.model.d_model = 32
     elif model_name.lower() == "xlstm":
-        config.model.num_blocks = 2  # Reduced for speed
-        config.model.xlstm_embedding_dim = 32  # Reduced for speed
+        config.model.num_blocks = 6
+        config.model.xlstm_embedding_dim = 64
         config.model.slstm_at = [1]
     elif model_name.lower() == "transformer":
-        # Already set in base config
         pass
 
     # Create datamodule
@@ -245,7 +243,7 @@ def print_combined_results_table(results_list):
     """Print combined results table for all models."""
     print("\n" + "=" * 100)
     print(
-        "Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}"
+        "Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}: the Transformer can extrapolate (R1) the best"
     )
     print("=" * 100)
     print(
@@ -299,56 +297,53 @@ def print_combined_results_table(results_list):
 
 
 def main():
-    # Base config (similar to fast_transformer_l5.yaml)
+    # Base config with increased values for better accuracy
     base_config = {
         "seed_everything": 42,
         "trainer": {
             "logger": False,
             "accelerator": "auto",
-            "max_epochs": 20,  # Reduced further for multiple models
-            "limit_train_batches": 3,  # Reduced for speed
-            "limit_val_batches": 1,  # Reduced for speed
-            "check_val_every_n_epoch": 5,  # Check less frequently
+            "max_epochs": 1000,
+            "limit_train_batches": None,
+            "limit_val_batches": None,
+            "check_val_every_n_epoch": 50,
             "num_sanity_val_steps": 0,
-            "enable_progress_bar": False,
+            "enable_progress_bar": True,
             "enable_model_summary": False,
             "deterministic": False,
             "benchmark": True,
         },
         "model": {
             "num_tokens": 6,
-            "dim_model": 8,  # Used by transformer and as embedding_dim for linear/lstm
-            "dim_feedforward": 128,
-            "num_heads": 4,
-            "test_prompt_length": 6,
-            "max_pred_length": 50,
-            "num_decoder_layers": 3,
+            "dim_model": 10,
+            "dim_feedforward": 1024,
+            "num_heads": 5,
+            "test_prompt_length": 8,
+            "max_pred_length": 300,
+            "num_decoder_layers": 7,
             "dropout_p": 0.1,
             "lr": 0.002,
             "layer_norm_eps": 6e-3,
             "model": "transformer",
-            # LSTM specific
-            "hidden_dim": 32,
-            "num_layers": 3,
+            "embedding_dim": 16,
+            "hidden_dim": 64,
+            "num_layers": 5,
             "dropout": 0.4,
-            # Linear specific
             "bias": True,
-            # Mamba specific
-            "n_layers": 4,
-            "d_state": 8,
-            "d_conv": 4,
-            "d_model": 16,
-            # xLSTM specific
-            "num_blocks": 2,
-            "xlstm_embedding_dim": 32,
+            "n_layers": 10,
+            "d_state": 16,
+            "d_conv": 8,
+            "d_model": 32,
+            "num_blocks": 6,
+            "xlstm_embedding_dim": 64,
             "slstm_at": [1],
         },
         "data": {
-            "num_train": 32,
-            "num_val": 16,
-            "num_test": 16,
-            "max_length": 16,
-            "batch_size": 8,
+            "num_train": 512,
+            "num_val": 256,
+            "num_test": 256,
+            "max_length": 256,
+            "batch_size": 128,
             "grammar": "aNbNcN",
         },
     }

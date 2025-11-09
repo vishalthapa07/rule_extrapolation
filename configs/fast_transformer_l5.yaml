@@ -1,6 +1,6 @@
 seed_everything: 42
 trainer:
-  logger: false  # Disable wandb for faster execution
+  logger: false # Disable wandb for faster execution
   accelerator: auto
   strategy: auto
   devices: auto
@@ -13,30 +13,30 @@ trainer:
         verbose: false
         save_top_k: 1
         mode: min
-        filename: 'transformer_l5_fast-{epoch:02d}-{Val/loss:.4f}'
+        filename: "transformer_l5_fast-{epoch:02d}-{Val/loss:.4f}"
   fast_dev_run: false
-  max_epochs: 30  # Reduced from 5000 for 2-minute run
+  max_epochs: 1000
   min_epochs: 1
   max_steps: -1
   min_steps: null
   max_time: null
-  limit_train_batches: 5  # Limit training batches for speed
-  limit_val_batches: 2  # Limit validation batches for speed
+  limit_train_batches: null
+  limit_val_batches: null
   limit_test_batches: null
   limit_predict_batches: null
   overfit_batches: 0.0
   val_check_interval: null
-  check_val_every_n_epoch: 3  # Check validation every 3 epochs
-  num_sanity_val_steps: 0  # Skip sanity checks
+  check_val_every_n_epoch: 50
+  num_sanity_val_steps: 0 # Skip sanity checks
   log_every_n_steps: 10
   enable_checkpointing: true
   enable_progress_bar: true
-  enable_model_summary: false  # Disable model summary for speed
+  enable_model_summary: false # Disable model summary for speed
   accumulate_grad_batches: 1
   gradient_clip_val: null
   gradient_clip_algorithm: null
-  deterministic: false  # Disable for speed
-  benchmark: true  # Enable for speed
+  deterministic: false # Disable for speed
+  benchmark: true # Enable for speed
   inference_mode: true
   use_distributed_sampler: true
   profiler: null
@@ -48,24 +48,23 @@ trainer:
   default_root_dir: null
 model:
   num_tokens: 6
-  dim_model: 8  # Reduced for speed
-  dim_feedforward: 128  # Reduced for speed
-  num_heads: 4  # Reduced for speed
-  test_prompt_length: 6  # Reduced for speed
-  max_pred_length: 50  # Reduced to avoid positional encoding issues
-  num_decoder_layers: 3  # Reduced for speed
+  dim_model: 10
+  dim_feedforward: 1024
+  num_heads: 5
+  test_prompt_length: 8
+  max_pred_length: 300
+  num_decoder_layers: 7
   dropout_p: 0.1
-  lr: 0.002  # From anbn.yaml
-  layer_norm_eps: 6e-3  # From anbn.yaml
+  lr: 0.002
+  layer_norm_eps: 6e-3
   model: transformer
 data:
-  num_train: 32  # Reduced for speed
-  num_val: 16  # Reduced for speed
-  num_test: 16  # Reduced for speed
-  max_length: 16  # Reduced from 256/512 for speed to avoid positional encoding issues
-  batch_size: 8  # Reduced for speed
+  num_train: 512
+  num_val: 256
+  num_test: 256
+  max_length: 256
+  batch_size: 128
   grammar: aNbNcN
 notes: null
 tags: null
 ckpt_path: null
-

@@ -3,7 +3,7 @@ import subprocess
 from itertools import product
 from os.path import dirname
 from random import choices
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type, TYPE_CHECKING
 
 
 import matplotlib.pyplot as plt
@@ -19,7 +19,20 @@ from xlstm import xLSTMLMModel, xLSTMLMModelConfig
 from xlstm.blocks.mlstm.block import mLSTMBlock, mLSTMBlockConfig
 from xlstm.blocks.slstm.block import sLSTMBlock, sLSTMBlockConfig
 
-from mamba.mamba_lm import MambaLM, MambaLMConfig
+if TYPE_CHECKING:
+    from mamba.mamba_lm import (
+        MambaLM as MambaLMType,
+        MambaLMConfig as MambaLMConfigType,
+    )
+else:
+    MambaLMType = None
+    MambaLMConfigType = None
+
+try:
+    from mamba.mamba_lm import MambaLM, MambaLMConfig  # type: ignore
+except ImportError:
+    MambaLM = None  # type: ignore[assignment]
+    MambaLMConfig = None  # type: ignore[assignment]
 from rule_extrapolation.data import (
     check_parity,
     check_same_number_as_bs,
@@ -197,8 +210,13 @@ class LightningGrammarModule(pl.LightningModule):
                 device=self.hparams.device,
             )
         elif self.hparams.model == "mamba":
-            self.model: nn.Module = MambaLM(  # type: ignore
-                lm_config=MambaLMConfig(
+            if MambaLM is None or MambaLMConfig is None:  # type: ignore[comparison-overlap]
+                raise ImportError(
+                    "Mamba module is not available. Please install it to use the mamba model."
+                )
+            # Mypy can't verify this at type-check time since MambaLM may be None
+            self.model = MambaLM(  # type: ignore[misc,arg-type]
+                lm_config=MambaLMConfig(  # type: ignore[misc,call-arg]
                     vocab_size=self.hparams.num_tokens,
                     d_model=self.hparams.d_model,
                     d_state=self.hparams.d_state,
@@ -208,27 +226,50 @@ class LightningGrammarModule(pl.LightningModule):
             )
 
         elif self.hparams.model == "xlstm":
-            xlstm_cfg = f""" 
-            vocab_size: {self.hparams.num_tokens}
-            mlstm_block:
-              mlstm:
-                conv1d_kernel_size: 4
-                qkv_proj_blocksize: 4
-                num_heads: 4
-            slstm_block:
-              slstm:
-                backend: cuda
-                num_heads: 4
-                conv1d_kernel_size: 4
-                bias_init: powerlaw_blockdependent
-              feedforward:
-                proj_factor: 1.3
-                act_fn: gelu
-            context_length: {self.hparams.max_data_length + 2}
-            num_blocks: {self.hparams.num_blocks}
-            embedding_dim: {self.hparams.xlstm_embedding_dim}
-            slstm_at: [1]
-            """
+            # xLSTM configuration - try CPU if CUDA not available
+            # Use mlstm only (no slstm) for CPU compatibility, or try CPU backend
+            backend = "cuda" if torch.cuda.is_available() else "cpu"
+
+            # For CPU, we'll use only mLSTM blocks (no sLSTM which requires CUDA)
+            # or configure with CPU backend if supported
+            if torch.cuda.is_available():
+                # Full xLSTM with sLSTM blocks on CUDA
+                xlstm_cfg = f""" 
+                vocab_size: {self.hparams.num_tokens}
+                mlstm_block:
+                  mlstm:
+                    conv1d_kernel_size: 4
+                    qkv_proj_blocksize: 4
+                    num_heads: 4
+                slstm_block:
+                  slstm:
+                    backend: cuda
+                    num_heads: 4
+                    conv1d_kernel_size: 4
+                    bias_init: powerlaw_blockdependent
+                  feedforward:
+                    proj_factor: 1.3
+                    act_fn: gelu
+                context_length: {self.hparams.max_data_length + 2}
+                num_blocks: {self.hparams.num_blocks}
+                embedding_dim: {self.hparams.xlstm_embedding_dim}
+                slstm_at: [1]
+                """
+            else:
+                # CPU-only configuration: use only mLSTM blocks (no sLSTM)
+                # sLSTM requires CUDA, so we skip it for CPU
+                xlstm_cfg = f""" 
+                vocab_size: {self.hparams.num_tokens}
+                mlstm_block:
+                  mlstm:
+                    conv1d_kernel_size: 4
+                    qkv_proj_blocksize: 4
+                    num_heads: 4
+                context_length: {self.hparams.max_data_length + 2}
+                num_blocks: {self.hparams.num_blocks}
+                embedding_dim: {self.hparams.xlstm_embedding_dim}
+                slstm_at: []
+                """
 
             cfg = OmegaConf.create(xlstm_cfg)
             cfg = from_dict(

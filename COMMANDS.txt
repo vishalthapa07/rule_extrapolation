@@ -1,0 +1,13 @@
+# Commands to run all models for L5 grammar
+
+# Method 1: Using the bash script
+./run_all_models_l5.sh
+
+# Method 2: Direct Python execution
+source venv/bin/activate
+python3 run_all_models_l5.py
+
+# Method 3: Run transformer only (faster)
+python3 run_transformer_l5.py
+
+# All commands should complete in under 2 minutes

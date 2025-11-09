@@ -7,13 +7,24 @@ for aNbNcN grammar (L5) and display results in a combined table format.
 import sys
 import os
 import torch
+import math
+import numpy as np
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from omegaconf import OmegaConf
 import time
+from collections import defaultdict
 
 from rule_extrapolation.runner import LightningGrammarModule
 from rule_extrapolation.datamodule import GrammarDataModule
+from rule_extrapolation.data import (
+    SOS_token,
+    A_token,
+    B_token,
+    C_token,
+    check_same_number_as_bs_cs,
+    check_as_before_bs_before_cs,
+)
 
 
 def convert_to_float(value):
@@ -21,6 +32,122 @@ def convert_to_float(value):
     if hasattr(value, "item"):
         return float(value.item())
     return float(value)
+
+
+def calc_distances_anbncn(prompt):
+    """Calculate distances for aNbNcN grammar (N1, N2) where N1 and N2 are the two smaller distances."""
+    num_3 = (prompt == A_token.item()).sum().item()
+    num_4 = (prompt == B_token.item()).sum().item()
+    num_5 = (prompt == C_token.item()).sum().item()
+    max_num = max(num_3, num_4, num_5)
+    distances = sorted([max_num - num_3, max_num - num_4, max_num - num_5])
+    distances = distances[1:]  # Remove the smallest (which is 0)
+    return tuple(distances)
+
+
+def r1_formula_anbncn(N1, N2, n):
+    """Calculate R1 chance level accuracy for aNbNcN."""
+    tot = 0.0
+    for m in range(0, (n - (N1 + N2)) // 3 + 1):
+        tot += (
+            math.comb(N1 + N2 + 3 * m, N1 + m)
+            * math.comb(N2 + 2 * m, m)
+            * (1 / (4 ** (N1 + N2 + 3 * m + 1)))
+        )
+    return tot
+
+
+def r2_formula_anbncn(prompt, test_prompt_length, max_pred_length):
+    """Calculate R2 chance level accuracy for aNbNcN."""
+    n = max_pred_length - len(prompt[1:])
+    acc = 0.0
+    if prompt[-1] == C_token.item():
+        for i in range(0, n + 1):
+            acc += 1 / (4 ** (i + 1))
+    elif prompt[-1] == B_token.item():
+        for i in range(0, n + 1):
+            for b in range(0, i + 1):
+                acc += 1 / (4 ** (i + 1))
+    elif prompt[-1] == A_token.item():
+        for i in range(0, n + 1):
+            for a in range(0, i + 1):
+                for b in range(0, i - a + 1):
+                    acc += 1 / (4 ** (i + 1))
+    else:
+        # SOS token or other
+        for i in range(0, n + 1):
+            for a in range(0, i + 1):
+                for b in range(0, i - a + 1):
+                    acc += 1 / (4 ** (i + 1))
+    return acc
+
+
+def r2_ood_anbncn(len_n_list):
+    """Calculate OOD R2 chance level accuracy for aNbNcN."""
+    tot = 0.0
+    all_count = 0
+    for n, number in len_n_list:
+        all_count += number
+        for i in range(0, n + 1):
+            for a in range(0, i + 1):
+                for b in range(0, i - a + 1):
+                    tot += (1 / (4 ** (i + 1))) * number
+    return tot / all_count if all_count > 0 else 0.0
+
+
+def calculate_chance_level_metrics(
+    test_prompts_id, test_prompts_ood, test_prompt_length, max_pred_length
+):
+    """Calculate chance level metrics for aNbNcN grammar."""
+    # Calculate ID R1
+    my_dict_id = defaultdict(int)
+    for prompt in test_prompts_id:
+        n = max_pred_length - len(prompt[1:])
+        distances = calc_distances_anbncn(prompt)
+        distances += (n,)
+        my_dict_id[distances] += 1
+
+    id_r1_acc = 0.0
+    for distances in my_dict_id.keys():
+        N1, N2, n = distances
+        id_r1_acc += r1_formula_anbncn(N1, N2, n) * my_dict_id[distances]
+    id_r1_acc /= sum(my_dict_id.values()) if my_dict_id else 1.0
+
+    # Calculate OOD R1
+    my_dict_ood = defaultdict(int)
+    len_n_list = []
+    for prompt in test_prompts_ood:
+        n = max_pred_length - len(prompt[1:])
+        distances = calc_distances_anbncn(prompt)
+        distances += (n,)
+        my_dict_ood[distances] += 1
+        # Track unique (n, count) pairs
+        found = False
+        for idx, (existing_n, count) in enumerate(len_n_list):
+            if existing_n == n:
+                len_n_list[idx] = (n, count + 1)
+                found = True
+                break
+        if not found:
+            len_n_list.append((n, 1))
+
+    ood_r1_acc = 0.0
+    for distances in my_dict_ood.keys():
+        N1, N2, n = distances
+        ood_r1_acc += r1_formula_anbncn(N1, N2, n) * my_dict_ood[distances]
+    ood_r1_acc /= sum(my_dict_ood.values()) if my_dict_ood else 1.0
+
+    # Calculate ID R2
+    id_r2_accuracy = []
+    for prompt in test_prompts_id:
+        r2 = r2_formula_anbncn(prompt, test_prompt_length, max_pred_length)
+        id_r2_accuracy.append(r2)
+    id_r2_acc = sum(id_r2_accuracy) / len(id_r2_accuracy) if id_r2_accuracy else 0.0
+
+    # Calculate OOD R2
+    ood_r2_acc = r2_ood_anbncn(len_n_list)
+
+    return id_r1_acc, id_r2_acc, ood_r1_acc, ood_r2_acc
 
 
 def train_and_evaluate_model(model_name, config_base, datamodule_config):
@@ -251,7 +378,7 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
     }
 
 
-def print_combined_results_table(results_list):
+def print_combined_results_table(results_list, chance_metrics=None):
     """Print combined results table for all models."""
     print("\n" + "=" * 100)
     print(
@@ -262,6 +389,16 @@ def print_combined_results_table(results_list):
         f"{'Model':<15} {'Test loss':<20} {'ID R1':<15} {'ID R2':<15} {'OOD R1':<15} {'OOD R2 completion':<20}"
     )
     print("-" * 100)
+
+    # Add Chance as first row if available
+    if chance_metrics:
+        id_r1 = round(chance_metrics["id_r1"], 3)
+        id_r2 = round(chance_metrics["id_r2"], 3)
+        ood_r1 = round(chance_metrics["ood_r1"], 3)
+        ood_r2 = round(chance_metrics["ood_r2_completion"], 3)
+        print(
+            f"{'Chance':<15} {'N/A':<20} {id_r1:.3f}            {id_r2:.3f}            {ood_r1:.3f}            {ood_r2:.3f}"
+        )
 
     # Model order as in the image - show only models that have results
     model_order = ["Transformer", "Linear", "LSTM", "Mamba", "xLSTM"]
@@ -413,6 +550,80 @@ def main():
         print("⚠ Warning: No GPU detected. xLSTM may not work properly without CUDA.")
         print("  Consider using Google Colab with GPU runtime for optimal performance.")
 
+    # Calculate chance level metrics
+    print("Calculating chance level metrics...")
+    chance_metrics = None
+    try:
+        # Create a dummy model to get test prompts (we only need the prompts, not training)
+        dummy_config = OmegaConf.create(base_config.copy())
+        dummy_config.model.model = "transformer"
+        dummy_datamodule = GrammarDataModule(
+            num_train=datamodule_config["num_train"],
+            num_val=datamodule_config["num_val"],
+            num_test=datamodule_config["num_test"],
+            max_length=datamodule_config["max_length"],
+            batch_size=datamodule_config["batch_size"],
+            grammar=datamodule_config["grammar"],
+        )
+        dummy_datamodule.prepare_data()
+        dummy_datamodule.setup("fit")
+
+        # Create model just to get test prompts
+        # Use CPU device to avoid GPU requirements
+        device = torch.device("cpu")
+        dummy_model = LightningGrammarModule(
+            num_tokens=6,
+            test_prompt_length=base_config["model"]["test_prompt_length"],
+            max_pred_length=base_config["model"]["max_pred_length"],
+            lr=base_config["model"]["lr"],
+            model="transformer",
+            grammar=datamodule_config["grammar"],
+            max_data_length=datamodule_config["max_length"],
+            batch_size=datamodule_config["batch_size"],
+            dim_model=8,
+            dim_feedforward=128,
+            num_heads=4,
+            num_decoder_layers=2,
+            dropout_p=0.1,
+            layer_norm_eps=6e-3,
+        )
+        dummy_model.to(device)
+        dummy_model.hparams.device = device
+
+        # Get test prompts (they should be set up during model initialization)
+        test_prompts_id = dummy_model.test_prompts_in_distribution.cpu()
+        test_prompts_ood = dummy_model.test_prompts_out_of_distribution.cpu()
+
+        if len(test_prompts_id) == 0 or len(test_prompts_ood) == 0:
+            raise ValueError(
+                "No test prompts found. Model may not have initialized correctly."
+            )
+
+        # Calculate chance metrics
+        id_r1, id_r2, ood_r1, ood_r2 = calculate_chance_level_metrics(
+            test_prompts_id,
+            test_prompts_ood,
+            base_config["model"]["test_prompt_length"],
+            base_config["model"]["max_pred_length"],
+        )
+
+        chance_metrics = {
+            "model": "Chance",
+            "test_loss": float("inf"),  # N/A for chance
+            "id_r1": id_r1,
+            "id_r2": id_r2,
+            "ood_r1": ood_r1,
+            "ood_r2_completion": ood_r2,
+        }
+        print(f"Chance level metrics calculated:")
+        print(f"  ID R1: {id_r1:.6f}")
+        print(f"  ID R2: {id_r2:.6f}")
+        print(f"  OOD R1: {ood_r1:.6f}")
+        print(f"  OOD R2: {ood_r2:.6f}\n")
+    except Exception as e:
+        print(f"Warning: Could not calculate chance metrics: {e}")
+        print("Continuing without chance metrics...\n")
+
     # Store results
     all_results = []
     total_start_time = time.time()
@@ -432,7 +643,7 @@ def main():
     total_time = time.time() - total_start_time
 
     # Print combined results table
-    print_combined_results_table(all_results)
+    print_combined_results_table(all_results, chance_metrics)
 
     # Print summary
     print("\n" + "=" * 100)

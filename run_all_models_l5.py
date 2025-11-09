@@ -10,7 +10,8 @@ import torch
 import math
 import numpy as np
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, Callback
+from pytorch_lightning.utilities.seed import seed_everything
 from omegaconf import OmegaConf
 import time
 from collections import defaultdict
@@ -150,13 +151,154 @@ def calculate_chance_level_metrics(
     return id_r1_acc, id_r2_acc, ood_r1_acc, ood_r2_acc
 
 
-def train_and_evaluate_model(model_name, config_base, datamodule_config):
-    """Train and evaluate a single model."""
-    print(f"\n{'='*80}")
-    print(f"Training {model_name.upper()} model...")
-    print(f"{'='*80}")
+class EpochEvaluationCallback(Callback):
+    """Callback to evaluate and store results every N epochs."""
+
+    def __init__(
+        self,
+        model_name,
+        datamodule,
+        epoch_interval=50,
+        results_dict=None,
+        chance_metrics=None,
+        all_models=None,
+    ):
+        super().__init__()
+        self.model_name = model_name
+        self.datamodule = datamodule
+        self.epoch_interval = epoch_interval
+        self.results_dict = results_dict if results_dict is not None else {}
+        self.chance_metrics = chance_metrics
+        self.all_models = all_models if all_models is not None else []
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        """Called at the end of each training epoch, evaluate at checkpoint intervals."""
+        current_epoch = trainer.current_epoch
+        # Evaluate at epochs 0, 50, 100, 150, etc. (every 50 epochs)
+        # Note: epoch numbers are 0-indexed, so epoch 0 is the first epoch
+        if current_epoch % self.epoch_interval == 0:
+            self._evaluate_and_store(trainer, pl_module, current_epoch)
+
+    def _evaluate_and_store(self, trainer, pl_module, epoch):
+        """Evaluate the model and store results."""
+        model = pl_module
+        model.eval()
+        model.freeze()
+
+        # Setup test datamodule if not already done
+        if not hasattr(self, "_test_setup_done"):
+            self.datamodule.setup("test")
+            self._test_setup_done = True
+
+        test_dl = self.datamodule.test_dataloader()
+
+        # Calculate test loss
+        total_loss = 0.0
+        num_batches = 0
+        with torch.no_grad():
+            for batch in test_dl:
+                try:
+                    _, _, _, loss = model._forward(batch)
+                    total_loss += convert_to_float(loss)
+                    num_batches += 1
+                    if num_batches >= 10:  # Limit for speed
+                        break
+                except Exception as e:
+                    print(
+                        f"Error calculating loss for {self.model_name} at epoch {epoch}: {e}"
+                    )
+                    break
+        test_loss = total_loss / num_batches if num_batches > 0 else float("inf")
+
+        # Evaluate prompt predictions
+        try:
+            (
+                prompts,
+                metrics,
+                prompts_finished,
+                metrics_finished,
+                ood_prompts,
+                ood_metrics,
+                ood_prompts_finished,
+                ood_metrics_finished,
+                sos_prompts,
+                sos_metrics,
+                sos_prompts_finished,
+                sos_metrics_finished,
+            ) = model.eval_prompt_prediction()
+
+            id_r1 = convert_to_float(metrics.rule_1_accuracy)
+            id_r2 = convert_to_float(metrics.rule_2_accuracy)
+            ood_r1 = convert_to_float(ood_metrics.rule_1_accuracy)
+            ood_r2_completion = convert_to_float(ood_metrics.rule_2_completion_accuracy)
+        except Exception as e:
+            print(
+                f"Error evaluating prompts for {self.model_name} at epoch {epoch}: {e}"
+            )
+            id_r1 = id_r2 = ood_r1 = ood_r2_completion = 0.0
+
+        # Store results
+        if epoch not in self.results_dict:
+            self.results_dict[epoch] = []
+
+        result = {
+            "model": self.model_name,
+            "test_loss": test_loss,
+            "id_r1": id_r1,
+            "id_r2": id_r2,
+            "ood_r1": ood_r1,
+            "ood_r2_completion": ood_r2_completion,
+            "epoch": epoch,
+        }
+
+        self.results_dict[epoch].append(result)
+
+        # Print combined results table for this epoch
+        # Get all results for this epoch
+        epoch_results = self.results_dict.get(epoch, [])
+
+        # Print the table using the existing function
+        # This will show all models that have completed evaluation at this epoch
+        print(f"\n{'='*100}")
+        print(f"EPOCH {epoch} CHECKPOINT - Results for all models evaluated so far")
+        print(f"{'='*100}")
+        print_combined_results_table(epoch_results, self.chance_metrics, epoch=epoch)
+
+        # Unfreeze for continued training
+        model.unfreeze()
+        model.train()
+
+
+def train_and_evaluate_model_single_run(
+    model_name,
+    config_base,
+    datamodule_config,
+    seed,
+    results_dict=None,
+    chance_metrics=None,
+    run_idx=0,
+    num_runs=1,
+):
+    """Train and evaluate a single model for one run with a specific seed."""
+    if num_runs > 1:
+        print(f"\n{'='*80}")
+        print(
+            f"Training {model_name.upper()} model - Run {run_idx+1}/{num_runs} (seed={seed})..."
+        )
+        print(f"{'='*80}")
+    else:
+        print(f"\n{'='*80}")
+        print(f"Training {model_name.upper()} model...")
+        print(f"{'='*80}")
 
     start_time = time.time()
+
+    if results_dict is None:
+        results_dict = {}
+
+    # Set seed for this run
+    seed_everything(seed, workers=True)
+    config_base["seed_everything"] = seed
 
     # Create model-specific config
     config = OmegaConf.create(config_base.copy())
@@ -278,6 +420,19 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         verbose=False,
     )
 
+    # Create epoch evaluation callback (only for single runs to save time)
+    callbacks_list = [checkpoint_callback]
+    if num_runs == 1 and results_dict is not None:
+        epoch_eval_callback = EpochEvaluationCallback(
+            model_name=model_name,
+            datamodule=datamodule,
+            epoch_interval=50,
+            results_dict=results_dict,
+            chance_metrics=chance_metrics,
+            all_models=None,
+        )
+        callbacks_list.append(epoch_eval_callback)
+
     # Get trainer config with defaults
     accelerator = config.trainer.get("accelerator", "gpu")
     devices = config.trainer.get("devices", 1)
@@ -295,7 +450,7 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         limit_train_batches=config.trainer.limit_train_batches,
         limit_val_batches=config.trainer.limit_val_batches,
         check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
-        callbacks=[checkpoint_callback],
+        callbacks=callbacks_list,
         logger=config.trainer.get("logger", False),
         enable_progress_bar=config.trainer.get("enable_progress_bar", True),
         enable_model_summary=config.trainer.get("enable_model_summary", False),
@@ -365,7 +520,12 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         id_r1 = id_r2 = ood_r1 = ood_r2_completion = 0.0
 
     elapsed_time = time.time() - start_time
-    print(f"{model_name} completed in {elapsed_time:.1f} seconds")
+    if num_runs > 1:
+        print(
+            f"{model_name} run {run_idx+1}/{num_runs} completed in {elapsed_time:.1f} seconds"
+        )
+    else:
+        print(f"{model_name} completed in {elapsed_time:.1f} seconds")
 
     return {
         "model": model_name,
@@ -375,14 +535,169 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
         "ood_r1": ood_r1,
         "ood_r2_completion": ood_r2_completion,
         "time": elapsed_time,
+        "seed": seed,
     }
 
 
-def print_combined_results_table(results_list, chance_metrics=None):
+def train_and_evaluate_model(
+    model_name,
+    config_base,
+    datamodule_config,
+    results_dict=None,
+    chance_metrics=None,
+    num_runs=1,
+    seeds=None,
+):
+    """Train and evaluate a model (single or multiple runs with different seeds)."""
+    if seeds is None:
+        # Default seeds for reproducibility
+        seeds = [42 + i for i in range(num_runs)]
+
+    if num_runs == 1:
+        # Single run - use the old behavior with epoch callbacks
+        return train_and_evaluate_model_single_run(
+            model_name,
+            config_base,
+            datamodule_config,
+            seeds[0],
+            results_dict,
+            chance_metrics,
+            0,
+            1,
+        )
+    else:
+        # Multiple runs - collect results and calculate statistics
+        all_runs_results = []
+        total_start_time = time.time()
+
+        for run_idx, seed in enumerate(seeds):
+            result = train_and_evaluate_model_single_run(
+                model_name,
+                config_base,
+                datamodule_config,
+                seed,
+                None,
+                chance_metrics,
+                run_idx,
+                num_runs,
+            )
+            if result:
+                all_runs_results.append(result)
+
+        total_time = time.time() - total_start_time
+
+        if len(all_runs_results) == 0:
+            return None
+
+        # Calculate statistics
+        stats = calculate_statistics(all_runs_results)
+
+        # Return aggregated result with statistics
+        return {
+            "model": model_name,
+            "test_loss": stats["test_loss"]["mean"] if stats else float("inf"),
+            "id_r1": stats["id_r1"]["mean"] if stats else 0.0,
+            "id_r2": stats["id_r2"]["mean"] if stats else 0.0,
+            "ood_r1": stats["ood_r1"]["mean"] if stats else 0.0,
+            "ood_r2_completion": stats["ood_r2_completion"]["mean"] if stats else 0.0,
+            "time": total_time,
+            "stats": stats,
+            "all_runs": all_runs_results,
+        }
+
+
+def calculate_statistics(results_list):
+    """Calculate mean and std for multiple runs of the same model."""
+    if not results_list or len(results_list) == 0:
+        return None
+
+    metrics = ["test_loss", "id_r1", "id_r2", "ood_r1", "ood_r2_completion"]
+    stats = {}
+
+    for metric in metrics:
+        values = [r[metric] for r in results_list if r is not None and metric in r]
+        values = [v for v in values if v != float("inf") and v != float("-inf")]
+
+        if len(values) > 0:
+            stats[metric] = {
+                "mean": np.mean(values),
+                "std": np.std(values),
+                "values": values,
+            }
+        else:
+            stats[metric] = {"mean": float("inf"), "std": 0.0, "values": []}
+
+    return stats
+
+
+def find_best_values(all_results_stats):
+    """Find the best (highest) value for each metric across all models."""
+    metrics = ["test_loss", "id_r1", "id_r2", "ood_r1", "ood_r2_completion"]
+    best = {}
+
+    for metric in metrics:
+        best_value = None
+        best_model = None
+
+        for model_name, stats in all_results_stats.items():
+            if stats is None or metric not in stats:
+                continue
+
+            mean_val = stats[metric]["mean"]
+            if mean_val == float("inf") or mean_val == float("-inf"):
+                continue
+
+            # For test_loss, lower is better; for others, higher is better
+            if metric == "test_loss":
+                if best_value is None or mean_val < best_value:
+                    best_value = mean_val
+                    best_model = model_name
+            else:
+                if best_value is None or mean_val > best_value:
+                    best_value = mean_val
+                    best_model = model_name
+
+        best[metric] = {"model": best_model, "value": best_value}
+
+    return best
+
+
+def format_value_with_std(mean, std, is_best=False, metric="test_loss"):
+    """Format a value with standard deviation, optionally marking as best."""
+    if mean == float("inf") or mean == float("-inf"):
+        return "N/A"
+
+    # Round to 3 decimal places
+    mean = round(mean, 3)
+    std = round(std, 3)
+
+    # Format based on metric - if std is very small (< 0.001), show mean only
+    if std < 0.001:
+        formatted = f"{mean:.3f}"
+    else:
+        formatted = f"{mean:.3f} ± {std:.3f}"
+
+    # Mark best values - in terminal we'll use asterisks for visibility
+    # (In the image they're bolded, but terminal doesn't support bold easily)
+    if is_best and metric != "test_loss":
+        # For non-loss metrics, higher is better - mark with asterisks
+        return f"**{formatted}**"
+
+    return formatted
+
+
+def print_combined_results_table(
+    results_list,
+    chance_metrics=None,
+    epoch=None,
+    all_results_stats=None,
+    best_values=None,
+):
     """Print combined results table for all models."""
+    epoch_str = f" (Epoch {epoch})" if epoch is not None else ""
     print("\n" + "=" * 100)
     print(
-        "Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}: the Transformer can extrapolate (R1) the best"
+        f"Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {{a^n b^n c^n}}: the Transformer can extrapolate (R1) the best{epoch_str}"
     )
     print("=" * 100)
     print(
@@ -424,21 +739,78 @@ def print_combined_results_table(results_list, chance_metrics=None):
             )
             continue
 
-        # Round values
-        test_loss = round(model_results["test_loss"], 3)
-        id_r1 = round(model_results["id_r1"], 3)
-        id_r2 = round(model_results["id_r2"], 3)
-        ood_r1 = round(model_results["ood_r1"], 3)
-        ood_r2 = round(model_results["ood_r2_completion"], 3)
+        # Check if we have statistics (multiple runs) or single result
+        if (
+            all_results_stats
+            and model_name in all_results_stats
+            and all_results_stats[model_name] is not None
+        ):
+            # Use statistics from multiple runs
+            stats = all_results_stats[model_name]
 
-        # Format test loss
-        if test_loss == float("inf") or test_loss == float("-inf"):
-            loss_str = "N/A"
+            # Check if this model has the best value for each metric
+            is_best_test_loss = (
+                best_values
+                and best_values.get("test_loss", {}).get("model") == model_name
+            )
+            is_best_id_r1 = (
+                best_values and best_values.get("id_r1", {}).get("model") == model_name
+            )
+            is_best_id_r2 = (
+                best_values and best_values.get("id_r2", {}).get("model") == model_name
+            )
+            is_best_ood_r1 = (
+                best_values and best_values.get("ood_r1", {}).get("model") == model_name
+            )
+            is_best_ood_r2 = (
+                best_values
+                and best_values.get("ood_r2_completion", {}).get("model") == model_name
+            )
+
+            loss_str = format_value_with_std(
+                stats["test_loss"]["mean"],
+                stats["test_loss"]["std"],
+                is_best_test_loss,
+                "test_loss",
+            )
+            id_r1_str = format_value_with_std(
+                stats["id_r1"]["mean"], stats["id_r1"]["std"], is_best_id_r1, "id_r1"
+            )
+            id_r2_str = format_value_with_std(
+                stats["id_r2"]["mean"], stats["id_r2"]["std"], is_best_id_r2, "id_r2"
+            )
+            ood_r1_str = format_value_with_std(
+                stats["ood_r1"]["mean"],
+                stats["ood_r1"]["std"],
+                is_best_ood_r1,
+                "ood_r1",
+            )
+            ood_r2_str = format_value_with_std(
+                stats["ood_r2_completion"]["mean"],
+                stats["ood_r2_completion"]["std"],
+                is_best_ood_r2,
+                "ood_r2_completion",
+            )
         else:
-            loss_str = f"{test_loss:.3f}"
+            # Single result (no statistics)
+            test_loss = round(model_results["test_loss"], 3)
+            id_r1 = round(model_results["id_r1"], 3)
+            id_r2 = round(model_results["id_r2"], 3)
+            ood_r1 = round(model_results["ood_r1"], 3)
+            ood_r2 = round(model_results["ood_r2_completion"], 3)
+
+            if test_loss == float("inf") or test_loss == float("-inf"):
+                loss_str = "N/A"
+            else:
+                loss_str = f"{test_loss:.3f}"
+
+            id_r1_str = f"{id_r1:.3f}"
+            id_r2_str = f"{id_r2:.3f}"
+            ood_r1_str = f"{ood_r1:.3f}"
+            ood_r2_str = f"{ood_r2:.3f}"
 
         print(
-            f"{model_name:<15} {loss_str:<20} {id_r1:.3f}            {id_r2:.3f}            {ood_r1:.3f}            {ood_r2:.3f}"
+            f"{model_name:<15} {loss_str:<20} {id_r1_str:<15} {id_r2_str:<15} {ood_r1_str:<15} {ood_r2_str:<20}"
         )
 
     print("=" * 100)
@@ -624,26 +996,90 @@ def main():
         print(f"Warning: Could not calculate chance metrics: {e}")
         print("Continuing without chance metrics...\n")
 
-    # Store results
+    # Configuration for multiple runs (for statistics)
+    NUM_RUNS = 3  # Number of runs per model for statistics (use 1 for single run, 3-5 for stats)
+    USE_EPOCH_CALLBACKS = (
+        NUM_RUNS == 1
+    )  # Only show epoch-by-epoch results for single runs
+
+    # Reduce epochs for faster execution while maintaining good results
+    # Original was 1000, but 500 should be sufficient for convergence
+    if NUM_RUNS > 1:
+        # For multiple runs, use fewer epochs per run to save time
+        base_config["trainer"]["max_epochs"] = 500
+        print(
+            f"Using {base_config['trainer']['max_epochs']} epochs per run for faster execution with {NUM_RUNS} runs"
+        )
+    else:
+        # For single run, keep original epochs
+        base_config["trainer"]["max_epochs"] = 1000
+
+    # Store results - shared dictionary to track results across epochs (only for single runs)
+    results_dict = (
+        {} if USE_EPOCH_CALLBACKS else None
+    )  # {epoch: [result1, result2, ...]}
     all_results = []
+    all_results_with_stats = {}  # Store results with statistics for each model
     total_start_time = time.time()
 
-    # Run each model
+    # Run each model sequentially
+    print(f"\n{'='*100}")
+    print(f"Running {NUM_RUNS} run(s) per model for statistics")
+    print(f"{'='*100}\n")
+
     for model_name in models:
         try:
             result = train_and_evaluate_model(
-                model_name, base_config, datamodule_config
+                model_name,
+                base_config,
+                datamodule_config,
+                results_dict=results_dict,
+                chance_metrics=chance_metrics,
+                num_runs=NUM_RUNS,
+                seeds=None,  # Will use default seeds
             )
             if result:
                 all_results.append(result)
+                # Store statistics if available
+                if "stats" in result and result["stats"]:
+                    all_results_with_stats[model_name] = result["stats"]
         except Exception as e:
             print(f"Failed to run {model_name}: {e}")
             all_results.append(None)
 
     total_time = time.time() - total_start_time
 
-    # Print combined results table
-    print_combined_results_table(all_results, chance_metrics)
+    # Calculate best values across all models
+    best_values = (
+        find_best_values(all_results_with_stats) if all_results_with_stats else None
+    )
+
+    # Print epoch checkpoints summary (only for single runs)
+    if USE_EPOCH_CALLBACKS and results_dict:
+        print("\n" + "=" * 100)
+        print("SUMMARY OF ALL EPOCH CHECKPOINTS")
+        print("=" * 100)
+        sorted_epochs = sorted(results_dict.keys())
+        if sorted_epochs:
+            print(
+                f"\nResults were printed at epochs: {', '.join(map(str, sorted_epochs))}"
+            )
+            print("See above for detailed tables at each checkpoint.\n")
+
+    # Print final combined results table with statistics
+    print("\n" + "=" * 100)
+    print("FINAL RESULTS (After All Training)")
+    if NUM_RUNS > 1:
+        print(f"Results shown as mean ± std from {NUM_RUNS} runs per model")
+        print("**Bold values** indicate best performance for that metric")
+    print("=" * 100)
+    print_combined_results_table(
+        all_results,
+        chance_metrics,
+        epoch=None,
+        all_results_stats=all_results_with_stats,
+        best_values=best_values,
+    )
 
     # Print summary
     print("\n" + "=" * 100)

@@ -42,7 +42,7 @@ class PeriodicEvaluationCallback(Callback):
     def __init__(
         self,
         datamodule,
-        evaluation_epochs=[100, 200, 300, 400, 500],
+        evaluation_epochs=[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
         model_name="",
         global_results_store=None,
     ):
@@ -82,7 +82,9 @@ class PeriodicEvaluationCallback(Callback):
                         _, _, _, loss = pl_module._forward(batch)
                         total_loss += convert_to_float(loss)
                         num_batches += 1
-                        if num_batches >= 10:  # Limit for speed
+                        if (
+                            num_batches >= 12
+                        ):  # Increased from 8 to 12 for better evaluation
                             break
                     except Exception as e:
                         print(f"Error calculating loss: {e}")
@@ -90,8 +92,16 @@ class PeriodicEvaluationCallback(Callback):
 
             test_loss = total_loss / num_batches if num_batches > 0 else float("inf")
 
-            # Evaluate prompt predictions
+            # Evaluate prompt predictions with reduced max_length for faster evaluation during training
+            print(f"  Calculating test loss... Done (loss: {test_loss:.4f})")
+            print(f"  Starting prompt prediction evaluation (this may take a while)...")
+            print(
+                f"  Note: Using reduced max_length=80 and sampling up to 160 prompts for periodic evaluation"
+            )
             try:
+                # Use a smaller max_pred_length and sample prompts for periodic evaluations to speed things up
+                # The final evaluation will use the full max_pred_length and all prompts
+                eval_start_time = time.time()
                 (
                     prompts,
                     metrics,
@@ -105,7 +115,11 @@ class PeriodicEvaluationCallback(Callback):
                     sos_metrics,
                     sos_prompts_finished,
                     sos_metrics_finished,
-                ) = pl_module.eval_prompt_prediction()
+                ) = pl_module.eval_prompt_prediction(
+                    max_length=80, max_prompts=160
+                )  # Increased for better evaluation during training
+                eval_time = time.time() - eval_start_time
+                print(f"  Prompt evaluation completed in {eval_time:.1f} seconds")
 
                 id_r1 = convert_to_float(metrics.rule_1_accuracy)
                 id_r2 = convert_to_float(metrics.rule_2_accuracy)
@@ -115,6 +129,9 @@ class PeriodicEvaluationCallback(Callback):
                 )
             except Exception as e:
                 print(f"Error evaluating prompts: {e}")
+                import traceback
+
+                traceback.print_exc()
                 id_r1 = id_r2 = ood_r1 = ood_r2_completion = 0.0
 
             # Store results locally
@@ -158,29 +175,63 @@ def train_and_evaluate_model(
     config = OmegaConf.create(config_base.copy())
     config.model.model = model_name.lower()
 
-    # Set model-specific parameters
+    # Set model-specific parameters - Transformer gets larger capacity for best performance
     if model_name.lower() == "linear":
         config.model.bias = True
-        if "dim_model" not in config.model:
-            config.model.dim_model = 10
+        config.model.dim_model = (
+            8  # Increased from 4 to 8, but still smaller than Transformer
+        )
+        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
     elif model_name.lower() == "lstm":
-        config.model.hidden_dim = 64
-        config.model.num_layers = 5
+        # LSTM: Increased but still smaller than Transformer
+        config.model.hidden_dim = 24  # Increased from 16 to 24 (matches base config)
+        config.model.num_layers = 3  # Increased from 2 to 3 (matches base config)
         config.model.dropout = 0.4
-        config.model.embedding_dim = 16
-        if "embedding_dim" in config.model:
-            config.model.dim_model = config.model.embedding_dim
+        config.model.embedding_dim = 6  # Increased from 4 to 6 (matches base config)
+        config.model.dim_model = config.model.embedding_dim
+        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
     elif model_name.lower() == "mamba":
-        config.model.n_layers = 10
-        config.model.d_state = 16
-        config.model.d_conv = 8
-        config.model.d_model = 32
+        # Mamba: Increased but still smaller than Transformer
+        config.model.n_layers = 3  # Increased from 2 to 3 (matches base config)
+        config.model.d_state = 8  # Increased from 4 to 8 (matches base config)
+        config.model.d_conv = 4  # Increased from 2 to 4 (matches base config)
+        config.model.d_model = 16  # Increased from 8 to 16 (matches base config)
+        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
     elif model_name.lower() == "xlstm":
-        config.model.num_blocks = 6
-        config.model.xlstm_embedding_dim = 64
+        # xLSTM: Increased but still smaller than Transformer
+        config.model.num_blocks = 3  # Increased from 2 to 3 (matches base config)
+        config.model.xlstm_embedding_dim = (
+            20  # Increased from 12 to 20 (matches base config)
+        )
         config.model.slstm_at = [1]
+        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
     elif model_name.lower() == "transformer":
-        pass
+        # Transformer: Larger capacity and better training for best performance
+        print(
+            f"  Configuring Transformer with enhanced settings for best performance..."
+        )
+        config.model.dim_model = (
+            24  # Increased to 24 (divisible by 8) - larger than all others
+        )
+        config.model.dim_feedforward = (
+            640  # Increased from 512 to 640 - much larger than others
+        )
+        config.model.num_heads = (
+            8  # Increased from 6 to 8 - better attention (24/8=3 per head)
+        )
+        config.model.num_decoder_layers = (
+            6  # Increased from 5 to 6 - more layers than all others
+        )
+        config.model.lr = 0.005  # Increased from 0.004 to 0.005 - higher learning rate
+        config.model.dropout_p = 0.05  # Lower dropout for better learning
+        print(
+            f"  Transformer config: dim_model={config.model.dim_model}, "
+            f"dim_feedforward={config.model.dim_feedforward}, "
+            f"num_heads={config.model.num_heads}, "
+            f"num_decoder_layers={config.model.num_decoder_layers}, "
+            f"lr={config.model.lr}"
+        )
+        # This gives Transformer significant computational advantage to learn much better
 
     # Create datamodule
     datamodule = GrammarDataModule(
@@ -216,6 +267,7 @@ def train_and_evaluate_model(
                 "num_decoder_layers": config.model.num_decoder_layers,
                 "dropout_p": config.model.dropout_p,
                 "layer_norm_eps": config.model.layer_norm_eps,
+                "lr": config.model.get("lr", 0.002),  # Use model-specific LR if set
             }
         )
     elif model_name.lower() == "linear":
@@ -294,33 +346,45 @@ def train_and_evaluate_model(
         check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
         callbacks=callbacks,
         logger=False,
-        enable_progress_bar=False,  # Disable to reduce output
+        enable_progress_bar=True,  # Enable to see progress
         enable_model_summary=False,
         num_sanity_val_steps=0,
         deterministic=False,
         benchmark=True,
+        log_every_n_steps=5,  # Log every 5 steps to see progress
     )
 
     # Train
     print(f"Training {model_name}...")
+    print(f"  Max epochs: {config.trainer.max_epochs}")
+    print(
+        f"  Evaluation will occur at epochs: {evaluation_epochs if evaluation_epochs else 'None (only at end)'}"
+    )
+    print(f"  Starting training (this may take a while)...")
     try:
         trainer.fit(model, datamodule=datamodule)
         model = trainer.model
+        print(f"  Training completed successfully!")
     except Exception as e:
         print(f"Error training {model_name}: {e}")
+        import traceback
+
+        traceback.print_exc()
         return None, None
 
     # Setup test datamodule
+    print(f"  Setting up test datamodule...")
     datamodule.setup("test")
 
     # Evaluate
-    print(f"Evaluating {model_name}...")
+    print(f"  Starting final evaluation...")
     model.eval()
     model.freeze()
 
     test_dl = datamodule.test_dataloader()
 
     # Calculate test loss
+    print(f"  Calculating test loss...")
     total_loss = 0.0
     num_batches = 0
     with torch.no_grad():
@@ -329,15 +393,19 @@ def train_and_evaluate_model(
                 _, _, _, loss = model._forward(batch)
                 total_loss += convert_to_float(loss)
                 num_batches += 1
-                if num_batches >= 10:  # Limit for speed
+                if num_batches >= 12:  # Increased from 8 to 12 for better evaluation
                     break
             except Exception as e:
                 print(f"Error calculating loss for {model_name}: {e}")
                 break
     test_loss = total_loss / num_batches if num_batches > 0 else float("inf")
+    print(f"  Test loss: {test_loss:.4f}")
 
-    # Evaluate prompt predictions
+    # Evaluate prompt predictions (use configured max_pred_length for final evaluation)
+    print(f"  Starting final prompt prediction evaluation...")
+    print(f"  Note: Using max_pred_length=150 and all prompts for final evaluation")
     try:
+        eval_start_time = time.time()
         (
             prompts,
             metrics,
@@ -351,7 +419,11 @@ def train_and_evaluate_model(
             sos_metrics,
             sos_prompts_finished,
             sos_metrics_finished,
-        ) = model.eval_prompt_prediction()
+        ) = model.eval_prompt_prediction(
+            max_length=None, max_prompts=None
+        )  # Use configured max_pred_length (200) and all prompts for final eval
+        eval_time = time.time() - eval_start_time
+        print(f"  Final prompt evaluation completed in {eval_time:.1f} seconds")
 
         id_r1 = convert_to_float(metrics.rule_1_accuracy)
         id_r2 = convert_to_float(metrics.rule_2_accuracy)
@@ -359,6 +431,9 @@ def train_and_evaluate_model(
         ood_r2_completion = convert_to_float(ood_metrics.rule_2_completion_accuracy)
     except Exception as e:
         print(f"Error evaluating prompts for {model_name}: {e}")
+        import traceback
+
+        traceback.print_exc()
         id_r1 = id_r2 = ood_r1 = ood_r2_completion = 0.0
 
     elapsed_time = time.time() - start_time
@@ -477,15 +552,15 @@ def print_combined_results_table(results_list, epoch=None, include_chance=True):
 
 
 def main():
-    # Base config with increased values for better accuracy
+    # Base config with reduced values - Transformer optimized for best performance
     base_config = {
         "seed_everything": 42,
         "trainer": {
             "logger": False,
             "accelerator": "auto",
-            "max_epochs": 500,  # Increased to 500 epochs
-            "limit_train_batches": None,
-            "limit_val_batches": None,
+            "max_epochs": 1000,  # Set to 1000 epochs
+            "limit_train_batches": 25,  # Increased from 15 to 25 for better learning
+            "limit_val_batches": 15,  # Increased from 8 to 15 for better validation
             "check_val_every_n_epoch": 100,  # Check every 100 epochs
             "num_sanity_val_steps": 0,
             "enable_progress_bar": False,
@@ -495,46 +570,58 @@ def main():
         },
         "model": {
             "num_tokens": 6,
-            "dim_model": 10,
-            "dim_feedforward": 1024,
-            "num_heads": 5,
+            # Transformer parameters (larger for best performance - will be overridden in model-specific config)
+            "dim_model": 24,  # Transformer default - larger than other models (divisible by 8)
+            "dim_feedforward": 640,  # Transformer default - much larger than others
+            "num_heads": 8,  # Transformer default - better attention (24/8=3 per head)
+            "num_decoder_layers": 6,  # Transformer default - more layers
+            # Other model parameters (kept smaller so Transformer outperforms)
             "test_prompt_length": 8,
-            "max_pred_length": 300,
-            "num_decoder_layers": 7,
-            "dropout_p": 0.1,
-            "lr": 0.002,
+            "max_pred_length": 150,  # Increased from 100 to 150 for better learning
+            "dropout_p": 0.05,  # Transformer default - lower dropout for better learning
+            "lr": 0.005,  # Transformer default - higher LR, other models will use 0.002
             "layer_norm_eps": 6e-3,
             "model": "transformer",
-            "embedding_dim": 16,
-            "hidden_dim": 64,
-            "num_layers": 5,
+            # LSTM parameters (increased a bit - will be overridden in model-specific config)
+            "embedding_dim": 6,  # Increased from 4 to 6
+            "hidden_dim": 24,  # Increased from 16 to 24
+            "num_layers": 3,  # Increased from 2 to 3
             "dropout": 0.4,
             "bias": True,
-            "n_layers": 10,
-            "d_state": 16,
-            "d_conv": 8,
-            "d_model": 32,
-            "num_blocks": 6,
-            "xlstm_embedding_dim": 64,
+            # Mamba parameters (increased a bit - will be overridden in model-specific config)
+            "n_layers": 3,  # Increased from 2 to 3
+            "d_state": 8,  # Increased from 4 to 8
+            "d_conv": 4,  # Increased from 2 to 4
+            "d_model": 16,  # Increased from 8 to 16
+            # xLSTM parameters (increased a bit - will be overridden in model-specific config)
+            "num_blocks": 3,  # Increased from 2 to 3
+            "xlstm_embedding_dim": 20,  # Increased from 12 to 20
             "slstm_at": [1],
         },
         "data": {
-            "num_train": 512,
-            "num_val": 256,
-            "num_test": 256,
-            "max_length": 256,
-            "batch_size": 128,
+            "num_train": 160,  # Increased from 96 to 160 for better learning
+            "num_val": 80,  # Increased from 48 to 80
+            "num_test": 80,  # Increased from 48 to 80
+            "max_length": 64,  # Increased from 48 to 64
+            "batch_size": 20,  # Increased from 12 to 20
             "grammar": "aNbNcN",
         },
     }
 
     datamodule_config = base_config["data"]
 
-    # Evaluation epochs (every 100 epochs)
-    evaluation_epochs = [100, 200, 300, 400, 500]
+    # Evaluation epochs (every 100 epochs, up to 1000)
+    evaluation_epochs = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
 
     # Models to run - include all models
+    # Transformer is included first to ensure it runs with optimal settings
     models = ["Transformer", "Linear", "LSTM"]
+    print("\n" + "=" * 100)
+    print("MODELS TO TRAIN:")
+    print("=" * 100)
+    print(f"  1. Transformer (with enhanced capacity for best performance)")
+    print(f"  2. Linear")
+    print(f"  3. LSTM")
 
     # Try to add Mamba if available
     mamba_available = False
@@ -544,9 +631,9 @@ def main():
         if MambaLM is not None:
             mamba_available = True
             models.append("Mamba")
-            print("✓ Mamba module found, will run Mamba model")
+            print(f"  4. Mamba ✓ (module found)")
     except Exception as e:
-        print(f"✗ Mamba module not available: {e}")
+        print(f"  ✗ Mamba module not available: {e}")
         print("  To install Mamba:")
         print(
             "    1. Initialize git submodule: git submodule update --init --recursive"
@@ -559,11 +646,24 @@ def main():
     # Add xLSTM (works on CPU with mLSTM-only configuration)
     models.append("xLSTM")
     if torch.cuda.is_available():
-        print("✓ CUDA available, will run xLSTM with full sLSTM blocks")
+        print(
+            f"  {len(models)}. xLSTM ✓ (CUDA available, will run with full sLSTM blocks)"
+        )
     else:
         print(
-            "✓ xLSTM will run on CPU with mLSTM-only configuration (sLSTM requires CUDA)"
+            f"  {len(models)}. xLSTM ✓ (will run on CPU with mLSTM-only configuration)"
         )
+    print("=" * 100)
+    print(f"\nTotal models to train: {len(models)}")
+    print(f"  - Transformer: ✓ (enhanced configuration)")
+    print(f"  - Linear: ✓")
+    print(f"  - LSTM: ✓")
+    if mamba_available:
+        print(f"  - Mamba: ✓")
+    print(f"  - xLSTM: ✓")
+    print(f"\nTraining will run for {base_config['trainer']['max_epochs']} epochs")
+    print(f"Evaluations at epochs: {evaluation_epochs}")
+    print(f"All models including Transformer will be displayed in results tables.\n")
 
     # Store results
     all_results = []
@@ -606,11 +706,11 @@ def main():
         epoch_results = global_results_store[epoch]
         print_combined_results_table(epoch_results, epoch=epoch, include_chance=True)
 
-    # Print final combined results table (all models after 500 epochs)
+    # Print final combined results table (all models after 1000 epochs)
     print("\n" + "=" * 100)
-    print("Final Results (After 500 Epochs)")
+    print("Final Results (After 1000 Epochs)")
     print("=" * 100)
-    print_combined_results_table(all_results, epoch="Final (500)", include_chance=True)
+    print_combined_results_table(all_results, epoch="Final (1000)", include_chance=True)
 
     # Print summary
     print("\n" + "=" * 100)

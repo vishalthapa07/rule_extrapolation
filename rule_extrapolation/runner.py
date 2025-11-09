@@ -734,27 +734,54 @@ class LightningGrammarModule(pl.LightningModule):
         ds = self.trainer.datamodule.test_dataset.data.view(-1)
         return ds[ds != PAD_token.item()].long().to(self.hparams.device)
 
-    def eval_prompt_prediction(self, max_length: Optional[int] = None):
+    def eval_prompt_prediction(
+        self, max_length: Optional[int] = None, max_prompts: Optional[int] = None
+    ):
         if max_length is None:
             max_length = self.hparams.max_pred_length
+
+        # Optionally limit number of prompts for faster evaluation
+        id_prompts = self.test_prompts_in_distribution
+        ood_prompts_eval = self.test_prompts_out_of_distribution
+
+        original_id_count = len(id_prompts)
+        original_ood_count = len(ood_prompts_eval)
+
+        if max_prompts is not None and len(id_prompts) > max_prompts:
+            # Sample a subset for faster evaluation
+            indices = torch.randperm(len(id_prompts), device=id_prompts.device)[
+                :max_prompts
+            ]
+            id_prompts = id_prompts[indices]
+
+        if max_prompts is not None and len(ood_prompts_eval) > max_prompts:
+            # Sample a subset for faster evaluation
+            indices = torch.randperm(
+                len(ood_prompts_eval), device=ood_prompts_eval.device
+            )[:max_prompts]
+            ood_prompts_eval = ood_prompts_eval[indices]
+
+        # Print progress if prompts were sampled
+        if max_prompts is not None and (
+            original_id_count > max_prompts or original_ood_count > max_prompts
+        ):
+            print(
+                f"    Evaluating {len(id_prompts)}/{original_id_count} ID prompts and {len(ood_prompts_eval)}/{original_ood_count} OOD prompts"
+            )
 
         (
             prompts,
             metrics,
             prompts_finished,
             metrics_finished,
-        ) = self._calc_prompt_pred_metrics(
-            self.test_prompts_in_distribution, max_length
-        )
+        ) = self._calc_prompt_pred_metrics(id_prompts, max_length)
 
         (
             ood_prompts,
             ood_metrics,
             ood_prompts_finished,
             ood_metrics_finished,
-        ) = self._calc_prompt_pred_metrics(
-            self.test_prompts_out_of_distribution, max_length
-        )
+        ) = self._calc_prompt_pred_metrics(ood_prompts_eval, max_length)
 
         # prompt prediction for a batch of SOS tokens
         sos_prompts = (
@@ -989,7 +1016,7 @@ class LightningGrammarModule(pl.LightningModule):
 
         finished = torch.BoolTensor([False] * prompt.size(0)).to(self.hparams.device)
 
-        if self.hparams.model == "linear" or "xlstm":
+        if self.hparams.model == "linear" or self.hparams.model == "xlstm":
             max_length = self.hparams.max_data_length - prompt.shape[1]
 
         for _ in range(max_length):

@@ -152,17 +152,20 @@ def train_and_evaluate_model(model_name, config_base, datamodule_config):
     )
 
     trainer = Trainer(
+        accelerator=config.trainer.get("accelerator", "gpu"),
+        devices=config.trainer.get("devices", 1),
+        precision=config.trainer.get("precision", "16-mixed"),
         max_epochs=config.trainer.max_epochs,
         limit_train_batches=config.trainer.limit_train_batches,
         limit_val_batches=config.trainer.limit_val_batches,
         check_val_every_n_epoch=config.trainer.check_val_every_n_epoch,
         callbacks=[checkpoint_callback],
-        logger=False,
-        enable_progress_bar=False,  # Disable to reduce output
-        enable_model_summary=False,
-        num_sanity_val_steps=0,
-        deterministic=False,
-        benchmark=True,
+        logger=config.trainer.get("logger", False),
+        enable_progress_bar=config.trainer.get("enable_progress_bar", True),
+        enable_model_summary=config.trainer.get("enable_model_summary", False),
+        num_sanity_val_steps=config.trainer.get("num_sanity_val_steps", 0),
+        deterministic=config.trainer.get("deterministic", False),
+        benchmark=config.trainer.get("benchmark", True),
     )
 
     # Train
@@ -297,12 +300,31 @@ def print_combined_results_table(results_list):
 
 
 def main():
+    # Check GPU availability
+    if torch.cuda.is_available():
+        print(f"✓ GPU detected: {torch.cuda.get_device_name(0)}")
+        print(f"  CUDA Version: {torch.version.cuda}")
+        print(
+            f"  GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB\n"
+        )
+        accelerator = "gpu"
+        devices = 1
+        precision = "16-mixed"
+    else:
+        print("⚠ Warning: No GPU detected. Training will be slower on CPU.")
+        print("  For faster training, use Google Colab with GPU runtime.")
+        print("  The script will continue with CPU...\n")
+        accelerator = "cpu"
+        devices = None
+        precision = "32"
+
     # Base config with increased values for better accuracy
     base_config = {
         "seed_everything": 42,
         "trainer": {
             "logger": False,
-            "accelerator": "auto",
+            "accelerator": accelerator,
+            "devices": devices,
             "max_epochs": 1000,
             "limit_train_batches": None,
             "limit_val_batches": None,
@@ -312,6 +334,7 @@ def main():
             "enable_model_summary": False,
             "deterministic": False,
             "benchmark": True,
+            "precision": precision,
         },
         "model": {
             "num_tokens": 6,
@@ -373,14 +396,13 @@ def main():
         )
         print("  Mamba will be skipped")
 
-    # Add xLSTM (works on CPU with mLSTM-only configuration)
+    # Add xLSTM (requires GPU for full sLSTM blocks)
     models.append("xLSTM")
     if torch.cuda.is_available():
-        print("✓ CUDA available, will run xLSTM with full sLSTM blocks")
+        print("✓ GPU available, will run xLSTM with full sLSTM blocks")
     else:
-        print(
-            "✓ xLSTM will run on CPU with mLSTM-only configuration (sLSTM requires CUDA)"
-        )
+        print("⚠ Warning: No GPU detected. xLSTM may not work properly without CUDA.")
+        print("  Consider using Google Colab with GPU runtime for optimal performance.")
 
     # Store results
     all_results = []

@@ -1,11 +1,11 @@
 seed_everything: 42
 trainer:
   logger: false # Disable wandb for faster execution
-  accelerator: auto
+  accelerator: gpu
   strategy: auto
-  devices: auto
+  devices: 1
   num_nodes: 1
-  precision: null
+  precision: 16-mixed
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:

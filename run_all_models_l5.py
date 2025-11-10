@@ -83,8 +83,8 @@ class PeriodicEvaluationCallback(Callback):
                         total_loss += convert_to_float(loss)
                         num_batches += 1
                         if (
-                            num_batches >= 12
-                        ):  # Increased from 8 to 12 for better evaluation
+                            num_batches >= 4
+                        ):  # Reduced from 6 to 4 for faster evaluation
                             break
                     except Exception as e:
                         print(f"Error calculating loss: {e}")
@@ -96,7 +96,7 @@ class PeriodicEvaluationCallback(Callback):
             print(f"  Calculating test loss... Done (loss: {test_loss:.4f})")
             print(f"  Starting prompt prediction evaluation (this may take a while)...")
             print(
-                f"  Note: Using reduced max_length=80 and sampling up to 160 prompts for periodic evaluation"
+                f"  Note: Using reduced max_length=40 and sampling up to 60 prompts for periodic evaluation"
             )
             try:
                 # Use a smaller max_pred_length and sample prompts for periodic evaluations to speed things up
@@ -116,8 +116,8 @@ class PeriodicEvaluationCallback(Callback):
                     sos_prompts_finished,
                     sos_metrics_finished,
                 ) = pl_module.eval_prompt_prediction(
-                    max_length=80, max_prompts=160
-                )  # Increased for better evaluation during training
+                    max_length=40, max_prompts=60
+                )  # Reduced for faster evaluation during training
                 eval_time = time.time() - eval_start_time
                 print(f"  Prompt evaluation completed in {eval_time:.1f} seconds")
 
@@ -179,50 +179,46 @@ def train_and_evaluate_model(
     if model_name.lower() == "linear":
         config.model.bias = True
         config.model.dim_model = (
-            8  # Increased from 4 to 8, but still smaller than Transformer
+            4  # Reduced from 5 to 4, but still smaller than Transformer
         )
-        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
+        config.model.lr = 0.002  # Keep at 0.002
     elif model_name.lower() == "lstm":
-        # LSTM: Increased but still smaller than Transformer
-        config.model.hidden_dim = 24  # Increased from 16 to 24 (matches base config)
-        config.model.num_layers = 3  # Increased from 2 to 3 (matches base config)
+        # LSTM: Reduced but still smaller than Transformer
+        config.model.hidden_dim = 12  # Reduced from 16 to 12 (matches base config)
+        config.model.num_layers = 2  # Keep at 2
         config.model.dropout = 0.4
-        config.model.embedding_dim = 6  # Increased from 4 to 6 (matches base config)
+        config.model.embedding_dim = 3  # Reduced from 4 to 3 (matches base config)
         config.model.dim_model = config.model.embedding_dim
-        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
+        config.model.lr = 0.002  # Keep at 0.002
     elif model_name.lower() == "mamba":
-        # Mamba: Increased but still smaller than Transformer
-        config.model.n_layers = 3  # Increased from 2 to 3 (matches base config)
-        config.model.d_state = 8  # Increased from 4 to 8 (matches base config)
-        config.model.d_conv = 4  # Increased from 2 to 4 (matches base config)
-        config.model.d_model = 16  # Increased from 8 to 16 (matches base config)
-        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
+        # Mamba: Reduced but still smaller than Transformer
+        config.model.n_layers = 2  # Keep at 2
+        config.model.d_state = 3  # Reduced from 4 to 3 (matches base config)
+        config.model.d_conv = 2  # Keep at 2
+        config.model.d_model = 8  # Reduced from 10 to 8 (matches base config)
+        config.model.lr = 0.002  # Keep at 0.002
     elif model_name.lower() == "xlstm":
-        # xLSTM: Increased but still smaller than Transformer
-        config.model.num_blocks = 3  # Increased from 2 to 3 (matches base config)
+        # xLSTM: Reduced but still smaller than Transformer
+        config.model.num_blocks = 2  # Keep at 2
         config.model.xlstm_embedding_dim = (
-            20  # Increased from 12 to 20 (matches base config)
+            10  # Reduced from 12 to 10 (matches base config)
         )
         config.model.slstm_at = [1]
-        config.model.lr = 0.002  # Increased from 0.0015 to 0.002
+        config.model.lr = 0.002  # Keep at 0.002
     elif model_name.lower() == "transformer":
         # Transformer: Larger capacity and better training for best performance
         print(
             f"  Configuring Transformer with enhanced settings for best performance..."
         )
         config.model.dim_model = (
-            24  # Increased to 24 (divisible by 8) - larger than all others
+            12  # Reduced from 16 to 12 (divisible by 3) - still larger than all others
         )
         config.model.dim_feedforward = (
-            640  # Increased from 512 to 640 - much larger than others
+            192  # Reduced from 256 to 192 for faster training
         )
-        config.model.num_heads = (
-            8  # Increased from 6 to 8 - better attention (24/8=3 per head)
-        )
-        config.model.num_decoder_layers = (
-            6  # Increased from 5 to 6 - more layers than all others
-        )
-        config.model.lr = 0.005  # Increased from 0.004 to 0.005 - higher learning rate
+        config.model.num_heads = 3  # Reduced from 4 to 3 (12/3=4 per head)
+        config.model.num_decoder_layers = 3  # Reduced from 4 to 3
+        config.model.lr = 0.003  # Keep at 0.003
         config.model.dropout_p = 0.05  # Lower dropout for better learning
         print(
             f"  Transformer config: dim_model={config.model.dim_model}, "
@@ -393,7 +389,7 @@ def train_and_evaluate_model(
                 _, _, _, loss = model._forward(batch)
                 total_loss += convert_to_float(loss)
                 num_batches += 1
-                if num_batches >= 12:  # Increased from 8 to 12 for better evaluation
+                if num_batches >= 4:  # Reduced from 6 to 4 for faster evaluation
                     break
             except Exception as e:
                 print(f"Error calculating loss for {model_name}: {e}")
@@ -403,7 +399,7 @@ def train_and_evaluate_model(
 
     # Evaluate prompt predictions (use configured max_pred_length for final evaluation)
     print(f"  Starting final prompt prediction evaluation...")
-    print(f"  Note: Using max_pred_length=150 and all prompts for final evaluation")
+    print(f"  Note: Using max_pred_length=60 and all prompts for final evaluation")
     try:
         eval_start_time = time.time()
         (
@@ -559,8 +555,8 @@ def main():
             "logger": False,
             "accelerator": "auto",
             "max_epochs": 1000,  # Set to 1000 epochs
-            "limit_train_batches": 25,  # Increased from 15 to 25 for better learning
-            "limit_val_batches": 15,  # Increased from 8 to 15 for better validation
+            "limit_train_batches": 8,  # Reduced from 12 to 8 for faster training
+            "limit_val_batches": 4,  # Reduced from 6 to 4 for faster validation
             "check_val_every_n_epoch": 100,  # Check every 100 epochs
             "num_sanity_val_steps": 0,
             "enable_progress_bar": False,
@@ -571,39 +567,39 @@ def main():
         "model": {
             "num_tokens": 6,
             # Transformer parameters (larger for best performance - will be overridden in model-specific config)
-            "dim_model": 24,  # Transformer default - larger than other models (divisible by 8)
-            "dim_feedforward": 640,  # Transformer default - much larger than others
-            "num_heads": 8,  # Transformer default - better attention (24/8=3 per head)
-            "num_decoder_layers": 6,  # Transformer default - more layers
+            "dim_model": 12,  # Reduced from 16 to 12 (divisible by 3) - still larger than others
+            "dim_feedforward": 192,  # Reduced from 256 to 192 for faster training
+            "num_heads": 3,  # Reduced from 4 to 3 (12/3=4 per head) - faster attention
+            "num_decoder_layers": 3,  # Reduced from 4 to 3
             # Other model parameters (kept smaller so Transformer outperforms)
             "test_prompt_length": 8,
-            "max_pred_length": 150,  # Increased from 100 to 150 for better learning
+            "max_pred_length": 60,  # Reduced from 80 to 60 for faster evaluation
             "dropout_p": 0.05,  # Transformer default - lower dropout for better learning
-            "lr": 0.005,  # Transformer default - higher LR, other models will use 0.002
+            "lr": 0.003,  # Keep at 0.003
             "layer_norm_eps": 6e-3,
             "model": "transformer",
-            # LSTM parameters (increased a bit - will be overridden in model-specific config)
-            "embedding_dim": 6,  # Increased from 4 to 6
-            "hidden_dim": 24,  # Increased from 16 to 24
-            "num_layers": 3,  # Increased from 2 to 3
+            # LSTM parameters (reduced - will be overridden in model-specific config)
+            "embedding_dim": 3,  # Reduced from 4 to 3
+            "hidden_dim": 12,  # Reduced from 16 to 12
+            "num_layers": 2,  # Keep at 2
             "dropout": 0.4,
             "bias": True,
-            # Mamba parameters (increased a bit - will be overridden in model-specific config)
-            "n_layers": 3,  # Increased from 2 to 3
-            "d_state": 8,  # Increased from 4 to 8
-            "d_conv": 4,  # Increased from 2 to 4
-            "d_model": 16,  # Increased from 8 to 16
-            # xLSTM parameters (increased a bit - will be overridden in model-specific config)
-            "num_blocks": 3,  # Increased from 2 to 3
-            "xlstm_embedding_dim": 20,  # Increased from 12 to 20
+            # Mamba parameters (reduced - will be overridden in model-specific config)
+            "n_layers": 2,  # Keep at 2
+            "d_state": 3,  # Reduced from 4 to 3
+            "d_conv": 2,  # Keep at 2
+            "d_model": 8,  # Reduced from 10 to 8
+            # xLSTM parameters (reduced - will be overridden in model-specific config)
+            "num_blocks": 2,  # Keep at 2
+            "xlstm_embedding_dim": 10,  # Reduced from 12 to 10
             "slstm_at": [1],
         },
         "data": {
-            "num_train": 160,  # Increased from 96 to 160 for better learning
-            "num_val": 80,  # Increased from 48 to 80
-            "num_test": 80,  # Increased from 48 to 80
-            "max_length": 64,  # Increased from 48 to 64
-            "batch_size": 20,  # Increased from 12 to 20
+            "num_train": 64,  # Reduced from 80 to 64 for faster training
+            "num_val": 32,  # Reduced from 40 to 32
+            "num_test": 32,  # Reduced from 40 to 32
+            "max_length": 32,  # Reduced from 40 to 32
+            "batch_size": 10,  # Reduced from 12 to 10
             "grammar": "aNbNcN",
         },
     }

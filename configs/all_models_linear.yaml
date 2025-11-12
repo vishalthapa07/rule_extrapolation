@@ -1,0 +1,57 @@
+seed_everything: true
+
+trainer:
+  strategy: auto
+  num_nodes: 1
+  accelerator: cpu
+  devices: 1
+  precision: 32
+  num_sanity_val_steps: 0
+  use_distributed_sampler: false
+  detect_anomaly: false
+  log_every_n_steps: 20
+  enable_progress_bar: true
+  enable_model_summary: true
+  enable_checkpointing: true
+
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: Val/loss
+        verbose: true
+        save_top_k: 1
+        mode: min
+
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: Val/loss
+        patience: 50
+        mode: min
+
+  fast_dev_run: false
+  max_epochs: 1000
+  check_val_every_n_epoch: 25
+
+model:
+  num_tokens: 5
+  test_prompt_length: 6
+  max_pred_length: 32
+  max_data_length: 32
+  lr: 0.0005
+  model: linear
+  dim_model: 128
+  bias: true
+  device: cpu
+
+data:
+  num_train: 2048
+  num_val: 1024
+  num_test: 1024
+  max_length: 32
+  batch_size: 128
+  grammar: aNbN
+
+notes: Linear model for all models comparison
+tags: [linear]
+ckpt_path: null
+

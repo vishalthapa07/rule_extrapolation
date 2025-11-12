@@ -198,18 +198,24 @@ class LightningGrammarModule(pl.LightningModule):
                 device=self.hparams.device,
             )
         elif self.hparams.model == "mamba":
-            pass
-            # self.model: nn.Module = MambaLM(  # type: ignore
-            #     lm_config=MambaLMConfig(
-            #         vocab_size=self.hparams.num_tokens,
-            #         d_model=self.hparams.d_model,
-            #         d_state=self.hparams.d_state,
-            #         d_conv=self.hparams.d_conv,
-            #         n_layers=self.hparams.n_layers,
-            #     )
-            # )
+            try:
+                from mamba_ssm.models.mixer_seq_simple import MambaLM
+                from mamba_ssm.utils.hf import MambaLMConfig
+                self.model: nn.Module = MambaLM(  # type: ignore
+                    lm_config=MambaLMConfig(
+                        vocab_size=self.hparams.num_tokens,
+                        d_model=self.hparams.d_model,
+                        d_state=self.hparams.d_state,
+                        d_conv=self.hparams.d_conv,
+                        n_layers=self.hparams.n_layers,
+                    )
+                )
+            except ImportError:
+                raise ImportError("Mamba model requires mamba-ssm package. Install with: pip install mamba-ssm")
 
         elif self.hparams.model == "xlstm":
+            # Use CPU backend since we're training on CPU
+            backend = "cpu" if self.hparams.device == "cpu" or not torch.cuda.is_available() else "cuda"
             xlstm_cfg = f""" 
             vocab_size: {self.hparams.num_tokens}
             mlstm_block:
@@ -219,7 +225,7 @@ class LightningGrammarModule(pl.LightningModule):
                 num_heads: 4
             slstm_block:
               slstm:
-                backend: cuda
+                backend: {backend}
                 num_heads: 4
                 conv1d_kernel_size: 4
                 bias_init: powerlaw_blockdependent

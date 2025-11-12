@@ -148,3 +148,14 @@ venv.bak/
 lightning_logs/
 MNIST
 .DS_Store
+
+# Training logs and outputs
+*.log
+training_*.log
+train_*_output.log
+train_*_fixed.log
+evaluation_*.txt
+*_results.txt
+L5_all_models_results*.txt
+all_models_results.txt
+training_results_summary.md

@@ -12,7 +12,7 @@ metric:
   name: Val/loss
 parameters:
   trainer.max_epochs:
-    value: 50000
+    value: 500
   model.plot1:
     value: true
   model.plot2:

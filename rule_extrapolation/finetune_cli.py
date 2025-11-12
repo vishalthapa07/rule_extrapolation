@@ -11,7 +11,7 @@ from rule_extrapolation.runner import LightningGrammarModule
 
 if __name__ == "__main__":
     GRAMMAR = "aNbNaN"
-    MAX_EPOCHS = 5000
+    MAX_EPOCHS = 500
 
     run = wandb.init(
         project="rule-extrapolation",

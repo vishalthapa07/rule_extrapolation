@@ -1,0 +1,59 @@
+seed_everything: true
+
+trainer:
+  strategy: auto
+  num_nodes: 1
+  accelerator: cpu
+  devices: 1
+  precision: 32
+  num_sanity_val_steps: 0
+  use_distributed_sampler: false
+  detect_anomaly: false
+  log_every_n_steps: 20
+  enable_progress_bar: true
+  enable_model_summary: true
+  enable_checkpointing: true
+
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: Val/loss
+        verbose: true
+        save_top_k: 1
+        mode: min
+
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: Val/loss
+        patience: 50
+        mode: min
+
+  fast_dev_run: false
+  max_epochs: 1000
+  check_val_every_n_epoch: 25
+
+model:
+  num_tokens: 7
+  test_prompt_length: 6
+  max_pred_length: 32
+  max_data_length: 32
+  lr: 0.0005
+  model: lstm
+  dim_model: 64
+  hidden_dim: 256
+  num_layers: 6
+  dropout: 0.1
+  device: cpu
+
+data:
+  num_train: 2048
+  num_val: 1024
+  num_test: 1024
+  max_length: 32
+  batch_size: 128
+  grammar: parentheses_and_brackets
+
+notes: LSTM model for L5 (parentheses_and_brackets) grammar
+tags: [lstm, L5]
+ckpt_path: null
+

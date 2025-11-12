@@ -1,0 +1,59 @@
+seed_everything: true
+
+trainer:
+  strategy: auto
+  num_nodes: 1
+  accelerator: cpu
+  devices: 1
+  precision: 32
+  num_sanity_val_steps: 0
+  use_distributed_sampler: false
+  detect_anomaly: false
+  log_every_n_steps: 10
+  enable_progress_bar: true
+  enable_model_summary: true
+  enable_checkpointing: true
+
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: Val/loss
+        verbose: true
+        save_top_k: 1
+        mode: min
+
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        monitor: Val/loss
+        patience: 30
+        mode: min
+
+  fast_dev_run: false
+  max_epochs: 500
+  check_val_every_n_epoch: 25
+
+model:
+  num_tokens: 5
+  dim_model: 32
+  dim_feedforward: 256
+  num_heads: 4
+  test_prompt_length: 6
+  max_pred_length: 32
+  num_decoder_layers: 4
+  dropout_p: 0.1
+  lr: 0.001
+  layer_norm_eps: 2e-4
+  model: transformer
+
+data:
+  num_train: 1024
+  num_val: 512
+  num_test: 512
+  max_length: 32
+  batch_size: 64
+  grammar: aNbN
+
+notes: Improved training for better ID R1 and ID R2 results
+tags: null
+ckpt_path: null
+

@@ -211,6 +211,7 @@ class LightningGrammarModule(pl.LightningModule):
                 device=self.hparams.device,
             )
         elif self.hparams.model == "mamba":
+<<<<<<< HEAD
             if MambaLM is None or MambaLMConfig is None:  # type: ignore[comparison-overlap]
                 raise ImportError(
                     "Mamba module is not available. Please install it to use the mamba model."

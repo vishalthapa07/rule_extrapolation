@@ -112,7 +112,7 @@ class TransformerDecoder(nn.Module):
         self.decoder = nn.TransformerEncoder(layer, num_decoder_layers)
 
         self.out = nn.Linear(dim_model, num_tokens)
-        
+            
         # Ensure all submodules are on the correct device
         if torch.backends.mps.is_available():
             self.to(torch.device("mps"))

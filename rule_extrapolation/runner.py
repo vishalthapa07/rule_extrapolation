@@ -3,7 +3,7 @@ import subprocess
 from itertools import product
 from os.path import dirname
 from random import choices
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Type, TYPE_CHECKING
 
 
 import matplotlib.pyplot as plt
@@ -19,7 +19,20 @@ from xlstm import xLSTMLMModel, xLSTMLMModelConfig
 from xlstm.blocks.mlstm.block import mLSTMBlock, mLSTMBlockConfig
 from xlstm.blocks.slstm.block import sLSTMBlock, sLSTMBlockConfig
 
-from mamba.mamba_lm import MambaLM, MambaLMConfig
+if TYPE_CHECKING:
+    from mamba.mamba_lm import (
+        MambaLM as MambaLMType,
+        MambaLMConfig as MambaLMConfigType,
+    )
+else:
+    MambaLMType = None
+    MambaLMConfigType = None
+
+try:
+    from mamba.mamba_lm import MambaLM, MambaLMConfig  # type: ignore
+except ImportError:
+    MambaLM = None  # type: ignore[assignment]
+    MambaLMConfig = None  # type: ignore[assignment]
 from rule_extrapolation.data import (
     check_parity,
     check_same_number_as_bs,
@@ -197,8 +210,13 @@ class LightningGrammarModule(pl.LightningModule):
                 device=self.hparams.device,
             )
         elif self.hparams.model == "mamba":
-            self.model: nn.Module = MambaLM(  # type: ignore
-                lm_config=MambaLMConfig(
+            if MambaLM is None or MambaLMConfig is None:  # type: ignore[comparison-overlap]
+                raise ImportError(
+                    "Mamba module is not available. Please install it to use the mamba model."
+                )
+            # Mypy can't verify this at type-check time since MambaLM may be None
+            self.model = MambaLM(  # type: ignore[misc,arg-type]
+                lm_config=MambaLMConfig(  # type: ignore[misc,call-arg]
                     vocab_size=self.hparams.num_tokens,
                     d_model=self.hparams.d_model,
                     d_state=self.hparams.d_state,
@@ -208,27 +226,50 @@ class LightningGrammarModule(pl.LightningModule):
             )
 
         elif self.hparams.model == "xlstm":
-            xlstm_cfg = f""" 
-            vocab_size: {self.hparams.num_tokens}
-            mlstm_block:
-              mlstm:
-                conv1d_kernel_size: 4
-                qkv_proj_blocksize: 4
-                num_heads: 4
-            slstm_block:
-              slstm:
-                backend: cuda
-                num_heads: 4
-                conv1d_kernel_size: 4
-                bias_init: powerlaw_blockdependent
-              feedforward:
-                proj_factor: 1.3
-                act_fn: gelu
-            context_length: {self.hparams.max_data_length + 2}
-            num_blocks: {self.hparams.num_blocks}
-            embedding_dim: {self.hparams.xlstm_embedding_dim}
-            slstm_at: [1]
-            """
+            # xLSTM configuration - try CPU if CUDA not available
+            # Use mlstm only (no slstm) for CPU compatibility, or try CPU backend
+            backend = "cuda" if torch.cuda.is_available() else "cpu"
+
+            # For CPU, we'll use only mLSTM blocks (no sLSTM which requires CUDA)
+            # or configure with CPU backend if supported
+            if torch.cuda.is_available():
+                # Full xLSTM with sLSTM blocks on CUDA
+                xlstm_cfg = f""" 
+                vocab_size: {self.hparams.num_tokens}
+                mlstm_block:
+                  mlstm:
+                    conv1d_kernel_size: 4
+                    qkv_proj_blocksize: 4
+                    num_heads: 4
+                slstm_block:
+                  slstm:
+                    backend: cuda
+                    num_heads: 4
+                    conv1d_kernel_size: 4
+                    bias_init: powerlaw_blockdependent
+                  feedforward:
+                    proj_factor: 1.3
+                    act_fn: gelu
+                context_length: {self.hparams.max_data_length + 2}
+                num_blocks: {self.hparams.num_blocks}
+                embedding_dim: {self.hparams.xlstm_embedding_dim}
+                slstm_at: [1]
+                """
+            else:
+                # CPU-only configuration: use only mLSTM blocks (no sLSTM)
+                # sLSTM requires CUDA, so we skip it for CPU
+                xlstm_cfg = f""" 
+                vocab_size: {self.hparams.num_tokens}
+                mlstm_block:
+                  mlstm:
+                    conv1d_kernel_size: 4
+                    qkv_proj_blocksize: 4
+                    num_heads: 4
+                context_length: {self.hparams.max_data_length + 2}
+                num_blocks: {self.hparams.num_blocks}
+                embedding_dim: {self.hparams.xlstm_embedding_dim}
+                slstm_at: []
+                """
 
             cfg = OmegaConf.create(xlstm_cfg)
             cfg = from_dict(
@@ -693,27 +734,54 @@ class LightningGrammarModule(pl.LightningModule):
         ds = self.trainer.datamodule.test_dataset.data.view(-1)
         return ds[ds != PAD_token.item()].long().to(self.hparams.device)
 
-    def eval_prompt_prediction(self, max_length: Optional[int] = None):
+    def eval_prompt_prediction(
+        self, max_length: Optional[int] = None, max_prompts: Optional[int] = None
+    ):
         if max_length is None:
             max_length = self.hparams.max_pred_length
+
+        # Optionally limit number of prompts for faster evaluation
+        id_prompts = self.test_prompts_in_distribution
+        ood_prompts_eval = self.test_prompts_out_of_distribution
+
+        original_id_count = len(id_prompts)
+        original_ood_count = len(ood_prompts_eval)
+
+        if max_prompts is not None and len(id_prompts) > max_prompts:
+            # Sample a subset for faster evaluation
+            indices = torch.randperm(len(id_prompts), device=id_prompts.device)[
+                :max_prompts
+            ]
+            id_prompts = id_prompts[indices]
+
+        if max_prompts is not None and len(ood_prompts_eval) > max_prompts:
+            # Sample a subset for faster evaluation
+            indices = torch.randperm(
+                len(ood_prompts_eval), device=ood_prompts_eval.device
+            )[:max_prompts]
+            ood_prompts_eval = ood_prompts_eval[indices]
+
+        # Print progress if prompts were sampled
+        if max_prompts is not None and (
+            original_id_count > max_prompts or original_ood_count > max_prompts
+        ):
+            print(
+                f"    Evaluating {len(id_prompts)}/{original_id_count} ID prompts and {len(ood_prompts_eval)}/{original_ood_count} OOD prompts"
+            )
 
         (
             prompts,
             metrics,
             prompts_finished,
             metrics_finished,
-        ) = self._calc_prompt_pred_metrics(
-            self.test_prompts_in_distribution, max_length
-        )
+        ) = self._calc_prompt_pred_metrics(id_prompts, max_length)
 
         (
             ood_prompts,
             ood_metrics,
             ood_prompts_finished,
             ood_metrics_finished,
-        ) = self._calc_prompt_pred_metrics(
-            self.test_prompts_out_of_distribution, max_length
-        )
+        ) = self._calc_prompt_pred_metrics(ood_prompts_eval, max_length)
 
         # prompt prediction for a batch of SOS tokens
         sos_prompts = (
@@ -948,7 +1016,7 @@ class LightningGrammarModule(pl.LightningModule):
 
         finished = torch.BoolTensor([False] * prompt.size(0)).to(self.hparams.device)
 
-        if self.hparams.model == "linear" or "xlstm":
+        if self.hparams.model == "linear" or self.hparams.model == "xlstm":
             max_length = self.hparams.max_data_length - prompt.shape[1]
 
         for _ in range(max_length):

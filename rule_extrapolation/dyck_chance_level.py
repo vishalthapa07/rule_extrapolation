@@ -42,8 +42,9 @@ for i in range(n):
     id_prompts = torch.cat(
         (
             torch.ones((data.shape[0], 1), dtype=torch.long)
-            * OPENING_PARENTHESIS_token,
-            torch.ones((data.shape[0], 1), dtype=torch.long) * OPENING_BRACKET_token,
+            * OPENING_PARENTHESIS_token.item(),
+            torch.ones((data.shape[0], 1), dtype=torch.long)
+            * OPENING_BRACKET_token.item(),
             data,
         ),
         dim=1,
@@ -55,8 +56,9 @@ for i in range(n):
     ood_prompts = torch.cat(
         (
             torch.ones((data.shape[0], 1), dtype=torch.long)
-            * CLOSING_PARENTHESIS_token,
-            torch.ones((data.shape[0], 1), dtype=torch.long) * OPENING_BRACKET_token,
+            * CLOSING_PARENTHESIS_token.item(),
+            torch.ones((data.shape[0], 1), dtype=torch.long)
+            * OPENING_BRACKET_token.item(),
             data,
         ),
         dim=1,

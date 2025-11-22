@@ -14,13 +14,13 @@ if __name__ == "__main__":
     MAX_EPOCHS = 5000
 
     run = wandb.init(
-        project="llm-non-identifiability",
-        entity="causal-representation-learning",
+        project="rule-extrapolation",
+        entity="rule-extrapolation-learning",
         job_type="finetune",
     )
     model_name = "model-jtt1bx1l:best"
     model_artifact = run.use_artifact(
-        f"causal-representation-learning/llm-non-identifiability/{model_name}",
+        f"rule-extrapolation-learning/rule-extrapolation/{model_name}",
         type="model",
     )
     artifact_dir = model_artifact.download()
@@ -55,8 +55,8 @@ if __name__ == "__main__":
     assert model.model.relu_rescale.requires_grad == False
 
     logger = WandbLogger(
-        entity="causal-representation-learning",
-        project="llm-non-identifiability",
+        entity="rule-extrapolation-learning",
+        project="rule-extrapolation",
         # name="finetune-bad",
         name="finetune-good",
         log_model=True,

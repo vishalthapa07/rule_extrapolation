@@ -12,24 +12,6 @@ source venv/bin/activate
 python3 run_all_models_l5.py
 ```
 
-## Expected Results
-
-The script will run all 5 models and display results in a table:
-
-```
-====================================================================================================
-Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}
-====================================================================================================
-Model           Test loss            ID R1           ID R2           OOD R1          OOD R2 completion
-----------------------------------------------------------------------------------------------------
-Transformer     1.989                0.000            0.600            0.025            0.750
-Linear          1.784                0.200            1.000            0.123            1.000
-LSTM            1.765                0.000            1.000            0.000            1.000
-Mamba           3.726                0.000            1.000            0.000            1.000
-xLSTM           1.944                0.000            0.000            0.000            0.004
-====================================================================================================
-```
-
 ## Model Status
 
 - ✅ **Transformer**: Works on CPU

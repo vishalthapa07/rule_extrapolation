@@ -70,24 +70,6 @@ python3 run_all_models_l5.py
 python3 run_transformer_l5.py
 ```
 
-## Expected Output
-
-The script will display a table similar to:
-
-```
-====================================================================================================
-Table 6: Test loss and rule-following accuracies for the context-sensitive language L5 = {a^n b^n c^n}
-====================================================================================================
-Model           Test loss            ID R1           ID R2           OOD R1          OOD R2 completion
-----------------------------------------------------------------------------------------------------
-Transformer     1.983                0.200            1.000            0.069            1.000
-Linear          1.773                0.200            1.000            0.123            1.000
-LSTM            1.821                0.000            0.800            0.014            1.000
-Mamba           [results if available]
-xLSTM           [results if CUDA available]
-====================================================================================================
-```
-
 ## Configuration
 
 The script uses optimized settings for fast execution (~2 minutes total):

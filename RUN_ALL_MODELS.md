@@ -1,6 +1,6 @@
 # Run All Models for L5 Grammar (a^n b^n c^n)
 
-This script trains and tests all available models (Transformer, Linear, LSTM, Mamba, xLSTM) for the context-sensitive language L5 = {a^n b^n c^n} and displays results in a table format.
+This script trains and tests all available models (Transformer, Linear, LSTM, Mamba, xLSTM) for the context-sensitive language L5 = {a^n b^n c^n} and displays results.
 
 ## Quick Start
 
@@ -16,13 +16,6 @@ cd /home/lenevo/python/rule_extrapolation
 source venv/bin/activate
 python3 run_all_models_l5.py
 ```
-
-## Expected Output
-
-The script will:
-1. Train each available model (Transformer, Linear, LSTM, and optionally Mamba/xLSTM if available)
-2. Evaluate each model on test data
-3. Display results in a table format similar to Table 6 from the paper
 
 ## Models
 
@@ -42,7 +35,7 @@ The script uses optimized settings for fast execution (~2 minutes total):
 
 ## Results Format
 
-Results are displayed in a table with:
+Results include:
 - Test loss
 - ID R1 (In-Distribution Rule 1 accuracy)
 - ID R2 (In-Distribution Rule 2 accuracy)

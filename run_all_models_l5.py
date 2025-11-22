@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to train and test all models (Transformer, Linear, LSTM, Mamba, xLSTM) 
-for aNbNcN grammar (L5) and display results in a combined table format.
+for aNbNcN grammar (L5) and display results.
 """
 
 import sys

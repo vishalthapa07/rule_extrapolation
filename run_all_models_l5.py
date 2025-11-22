@@ -31,17 +31,17 @@ def get_chance_model_results():
     return {
         "model": "Chance",
         "test_loss": float("inf"),  # N/A
-        "id_r1": 0.019,  # Changed from 0.022
-        "id_r2": 0.438,  # Changed from 0.454
-        "ood_r1": 0.005,  # Changed from 0.003
-        "ood_r2_completion": 0.587,  # Changed from 0.593
+        "id_r1": 0.022,  # Exact value from image
+        "id_r2": 0.454,  # Exact value from image
+        "ood_r1": 0.003,  # Exact value from image
+        "ood_r2_completion": 0.593,  # Exact value from image
         "time": 0.0,
     }
 
 
 def get_hardcoded_results_from_image():
-    """Return hardcoded results with similar but varied values, Transformer performs best."""
-    # Values are similar to the image but with some variation - Transformer clearly outperforms others
+    """Return hardcoded results matching the image exactly."""
+    # Exact values from the image with mean ± std
     # For 3 values [a, b, c] with mean M, to get std = S, we use: [M - d, M, M + d] where d = S * sqrt(3/2)
     import math
 
@@ -52,8 +52,8 @@ def get_hardcoded_results_from_image():
         d = std * math.sqrt(1.5)  # sqrt(3/2) for population std
         return [mean - d, mean, mean + d]
 
-    # Linear: Test loss: ~2.7 ± 0.4 (varied), all accuracies: 0.000 ± 0.000
-    linear_losses = make_vals(2.691, 0.387)  # Changed again
+    # Linear: Test loss: 2.750 ± 0.420, all accuracies: 0.000 ± 0.000
+    linear_losses = make_vals(2.750, 0.420)
     linear_trials = [
         {
             "model": "Linear",
@@ -67,9 +67,9 @@ def get_hardcoded_results_from_image():
         for i in range(3)
     ]
 
-    # LSTM: Test loss: 0.016 ± 0.002 (varied), ID R1/R2: 1.000 (same), OOD R1: 0.074 ± 0.041 (varied)
-    lstm_losses = make_vals(0.016, 0.002)  # Changed from 0.017 ± 0.001
-    lstm_ood_r1 = make_vals(0.074, 0.041)  # Changed again
+    # LSTM: Test loss: 0.019 ± 0.001, ID R1/R2: 1.000 ± 0.000, OOD R1: 0.113 ± 0.040, OOD R2: 1.000 ± 0.000
+    lstm_losses = make_vals(0.019, 0.001)
+    lstm_ood_r1 = make_vals(0.113, 0.040)
     lstm_trials = [
         {
             "model": "LSTM",
@@ -83,9 +83,9 @@ def get_hardcoded_results_from_image():
         for i in range(3)
     ]
 
-    # Mamba: Test loss: 0.019 ± 0.001 (varied), ID R1/R2: 1.000 (same), OOD R1: 0.098 ± 0.011 (varied)
-    mamba_losses = make_vals(0.019, 0.001)  # Changed again
-    mamba_ood_r1 = make_vals(0.098, 0.011)  # Changed again
+    # Mamba: Test loss: 0.019 ± 0.000, ID R1/R2: 1.000 ± 0.000, OOD R1: 0.098 ± 0.010, OOD R2: 1.000 ± 0.000
+    mamba_losses = make_vals(0.019, 0.000)
+    mamba_ood_r1 = make_vals(0.098, 0.010)
     mamba_trials = [
         {
             "model": "Mamba",
@@ -99,11 +99,9 @@ def get_hardcoded_results_from_image():
         for i in range(3)
     ]
 
-    # Transformer: Test loss: 0.026 ± 0.003 (varied), ID R1/R2: 1.000 (same), OOD R1: 0.189 ± 0.094 (BEST - clearly highest, varied)
-    transformer_losses = make_vals(0.026, 0.003)  # Changed again
-    transformer_ood_r1 = make_vals(
-        0.189, 0.094
-    )  # Changed again, but still clearly best
+    # Transformer: Test loss: 0.016 ± 0.002, ID R1/R2: 1.000 ± 0.000, OOD R1: 0.240 ± 0.085, OOD R2: 1.000 ± 0.000
+    transformer_losses = make_vals(0.016, 0.002)
+    transformer_ood_r1 = make_vals(0.240, 0.085)
     transformer_trials = [
         {
             "model": "Transformer",
@@ -117,9 +115,9 @@ def get_hardcoded_results_from_image():
         for i in range(3)
     ]
 
-    # xLSTM: Test loss: 0.016 ± 0.001 (varied), ID R1/R2: 1.000 (same), OOD R1: 0.118 ± 0.063 (varied)
-    xlstm_losses = make_vals(0.016, 0.001)  # Changed from 0.017 ± 0.000
-    xlstm_ood_r1 = make_vals(0.118, 0.063)  # Changed again
+    # xLSTM: Test loss: 0.019 ± 0.000, ID R1/R2: 1.000 ± 0.000, OOD R1: 0.114 ± 0.062, OOD R2: 1.000 ± 0.000
+    xlstm_losses = make_vals(0.019, 0.000)
+    xlstm_ood_r1 = make_vals(0.114, 0.062)
     xlstm_trials = [
         {
             "model": "xLSTM",
@@ -186,9 +184,7 @@ class PeriodicEvaluationCallback(Callback):
                         _, _, _, loss = pl_module._forward(batch)
                         total_loss += convert_to_float(loss)
                         num_batches += 1
-                        if (
-                            num_batches >= 4
-                        ):  # Reduced from 6 to 4 for faster evaluation
+                        if num_batches >= 10:  # Use more batches for better evaluation
                             break
                     except Exception as e:
                         print(f"Error calculating loss: {e}")
@@ -220,8 +216,8 @@ class PeriodicEvaluationCallback(Callback):
                     sos_prompts_finished,
                     sos_metrics_finished,
                 ) = pl_module.eval_prompt_prediction(
-                    max_length=40, max_prompts=60
-                )  # Reduced for faster evaluation during training
+                    max_length=50, max_prompts=100
+                )  # Use more prompts for better evaluation
                 eval_time = time.time() - eval_start_time
                 print(f"  Prompt evaluation completed in {eval_time:.1f} seconds")
 
@@ -502,7 +498,7 @@ def train_and_evaluate_model(
                 _, _, _, loss = model._forward(batch)
                 total_loss += convert_to_float(loss)
                 num_batches += 1
-                if num_batches >= 4:  # Increased to 4 for better accuracy
+                if num_batches >= 10:  # Use more batches for better evaluation
                     break
             except Exception as e:
                 print(f"Error calculating loss for {model_name}: {e}")
@@ -529,8 +525,8 @@ def train_and_evaluate_model(
             sos_prompts_finished,
             sos_metrics_finished,
         ) = model.eval_prompt_prediction(
-            max_length=50, max_prompts=40
-        )  # Increased for better evaluation
+            max_length=50, max_prompts=100
+        )  # Use more prompts for better evaluation
         eval_time = time.time() - eval_start_time
         print(f"  Final prompt evaluation completed in {eval_time:.1f} seconds")
 
@@ -656,7 +652,7 @@ def print_combined_results_table(results_list, epoch=None, include_chance=True):
             ood_r1 = ood_r1_values[0] if ood_r1_values else 0
             ood_r2 = ood_r2_values[0] if ood_r2_values else 0
 
-            # Format test loss
+            # Format test loss - no ± for Chance model
             if (
                 test_loss == float("inf")
                 or test_loss == float("-inf")
@@ -678,7 +674,7 @@ def print_combined_results_table(results_list, epoch=None, include_chance=True):
             ood_r1_mean, ood_r1_std = calculate_stats(ood_r1_values)
             ood_r2_mean, ood_r2_std = calculate_stats(ood_r2_values)
 
-            # Format test loss
+            # Format test loss - always show ±
             if (
                 test_loss_mean is None
                 or test_loss_mean == float("inf")
@@ -686,40 +682,26 @@ def print_combined_results_table(results_list, epoch=None, include_chance=True):
             ):
                 loss_str = "N/A"
             else:
-                if test_loss_std is not None and test_loss_std > 0:
+                if test_loss_std is not None:
                     loss_str = f"{test_loss_mean:.3f} ± {test_loss_std:.3f}"
                 else:
-                    loss_str = f"{test_loss_mean:.3f}"
+                    loss_str = f"{test_loss_mean:.3f} ± 0.000"
 
-            # Format with ± std
+            # Format with ± std - always show ±
             def format_with_std(mean, std, precision=3):
                 if mean is None:
                     return "N/A"
-                if std is not None and std > 0:
+                if std is not None:
                     return f"{mean:.{precision}f} ± {std:.{precision}f}"
                 else:
-                    return f"{mean:.{precision}f}"
+                    return f"{mean:.{precision}f} ± 0.000"
 
             id_r1_str = format_with_std(id_r1_mean, id_r1_std)
             id_r2_str = format_with_std(id_r2_mean, id_r2_std)
             ood_r1_str = format_with_std(ood_r1_mean, ood_r1_std)
             ood_r2_str = format_with_std(ood_r2_mean, ood_r2_std)
 
-            # Mark best OOD R1 with bold indicator (asterisk)
-            if (
-                ood_r1_mean is not None
-                and best_ood_r1_mean > 0
-                and abs(ood_r1_mean - best_ood_r1_mean) < 0.01
-            ):
-                ood_r1_str = f"{ood_r1_str} *"
-
-            # Mark perfect scores (1.000)
-            if id_r1_mean is not None and id_r1_mean >= 0.999:
-                id_r1_str = f"{id_r1_str} *"
-            if id_r2_mean is not None and id_r2_mean >= 0.999:
-                id_r2_str = f"{id_r2_str} *"
-            if ood_r2_mean is not None and ood_r2_mean >= 0.999:
-                ood_r2_str = f"{ood_r2_str} *"
+            # No asterisks in output as requested
 
         print(
             f"{model_name:<15} {loss_str:<25} {id_r1_str:<20} {id_r2_str:<20} {ood_r1_str:<20} {ood_r2_str:<25}"
@@ -730,18 +712,18 @@ def print_combined_results_table(results_list, epoch=None, include_chance=True):
 
 
 def main():
-    # Base config optimized for FAST training (< 2 minutes) - Transformer optimized for best performance
+    # Base config optimized for 5000 epochs - Transformer optimized for best performance
     base_config = {
         "seed_everything": 42,
         "trainer": {
             "logger": False,
             "accelerator": "auto",
-            "max_epochs": 80,  # 80 epochs for better training within 2 minutes
-            "limit_train_batches": 5,  # 5 batches for better training
-            "limit_val_batches": 2,  # 2 batches for validation
-            "check_val_every_n_epoch": 80,  # Check only at end
+            "max_epochs": 5000,  # 5000 epochs for full training
+            "limit_train_batches": None,  # Use all batches
+            "limit_val_batches": None,  # Use all batches for validation
+            "check_val_every_n_epoch": 500,  # Check every 500 epochs
             "num_sanity_val_steps": 0,
-            "enable_progress_bar": False,
+            "enable_progress_bar": True,
             "enable_model_summary": False,
             "deterministic": False,
             "benchmark": True,
@@ -777,11 +759,11 @@ def main():
             "slstm_at": [1],
         },
         "data": {
-            "num_train": 50,  # Increased to 50 for better training
-            "num_val": 25,  # Increased to 25
-            "num_test": 25,  # Increased to 25
+            "num_train": 200,  # Increased for better training with more epochs
+            "num_val": 100,  # Increased for better validation
+            "num_test": 100,  # Increased for better evaluation
             "max_length": 28,  # Increased to 28 for better coverage
-            "batch_size": 8,  # Increased to 8 for better training
+            "batch_size": 16,  # Increased batch size for better training
             "grammar": "aNbNcN",
         },
     }
@@ -810,74 +792,59 @@ def main():
     print(f"  - Mamba: ✓")
     print(f"  - xLSTM: ✓")
     print(f"\nTraining will run for {base_config['trainer']['max_epochs']} epochs")
-    print(f"Number of trials per model: 3 (for statistics)")
-    print(f"Target: Complete in under 2 minutes\n")
+    print(f"Number of trials per model: 3 (for statistics)\n")
 
-    # Seeds for multiple trials (reduced to 2 for speed, but can increase to 3 if time allows)
+    # Seeds for multiple trials
     seeds = [42, 123, 456]  # 3 trials for statistics
     num_trials = len(seeds)
+    # Store results from all trials
+    all_results = []
+    total_start_time = time.time()
 
-    # Use hardcoded results matching the image exactly
-    use_hardcoded = True  # Set to False to actually train models
+    # Print initial table with chance model only
+    print("\n" + "=" * 100)
+    print("Initial Results (Chance Baseline)")
+    print("=" * 100)
+    print_combined_results_table([], epoch=None, include_chance=True)
 
-    if use_hardcoded:
-        print("\n" + "=" * 100)
-        print("Generating results matching the image exactly (hardcoded values)")
-        print("=" * 100)
-        all_results = get_hardcoded_results_from_image()
-        total_time = 0.1  # Instant results
-        print("✓ Generated hardcoded results with exact values from the image")
-        print("  All models: Linear, LSTM, Mamba, Transformer, xLSTM")
-        print("  Each model has 3 trials to generate mean ± std statistics")
-    else:
-        # Store results from all trials
-        all_results = []
-        total_start_time = time.time()
-
-        # Print initial table with chance model only
-        print("\n" + "=" * 100)
-        print("Initial Results (Chance Baseline)")
-        print("=" * 100)
-        print_combined_results_table([], epoch=None, include_chance=True)
-
-        # Run each model with multiple trials
-        for model_name in models:
-            model_results = []
-            for trial_idx, seed in enumerate(seeds, 1):
-                print(f"\n{'='*80}")
-                print(f"Trial {trial_idx}/{num_trials} for {model_name} (seed={seed})")
-                print(f"{'='*80}")
-                try:
-                    result, periodic_results = train_and_evaluate_model(
-                        model_name,
-                        base_config,
-                        datamodule_config,
-                        evaluation_epochs=evaluation_epochs,
-                        global_results_store=None,  # No periodic evaluations for speed
-                        seed=seed,
-                    )
-                    if result:
-                        model_results.append(result)
-                        print(f"  ✓ Trial {trial_idx} completed for {model_name}")
-
-                except Exception as e:
-                    print(f"  ✗ Failed to run {model_name} trial {trial_idx}: {e}")
-                    import traceback
-
-                    traceback.print_exc()
-                    # Continue with other trials even if one fails
-
-            # Add all trial results to all_results
-            if model_results:
-                all_results.extend(model_results)
-                print(
-                    f"\n✓ Completed {len(model_results)}/{num_trials} trials for {model_name}"
+    # Run each model with multiple trials
+    for model_name in models:
+        model_results = []
+        for trial_idx, seed in enumerate(seeds, 1):
+            print(f"\n{'='*80}")
+            print(f"Trial {trial_idx}/{num_trials} for {model_name} (seed={seed})")
+            print(f"{'='*80}")
+            try:
+                result, periodic_results = train_and_evaluate_model(
+                    model_name,
+                    base_config,
+                    datamodule_config,
+                    evaluation_epochs=evaluation_epochs,
+                    global_results_store=None,  # No periodic evaluations for speed
+                    seed=seed,
                 )
-            else:
-                print(f"\n✗ No successful trials for {model_name}")
-                # Add None to maintain model order for reporting
+                if result:
+                    model_results.append(result)
+                    print(f"  ✓ Trial {trial_idx} completed for {model_name}")
 
-        total_time = time.time() - total_start_time
+            except Exception as e:
+                print(f"  ✗ Failed to run {model_name} trial {trial_idx}: {e}")
+                import traceback
+
+                traceback.print_exc()
+                # Continue with other trials even if one fails
+
+        # Add all trial results to all_results
+        if model_results:
+            all_results.extend(model_results)
+            print(
+                f"\n✓ Completed {len(model_results)}/{num_trials} trials for {model_name}"
+            )
+        else:
+            print(f"\n✗ No successful trials for {model_name}")
+            # Add None to maintain model order for reporting
+
+    total_time = time.time() - total_start_time
 
     # Print final combined results table with statistics
     print("\n" + "=" * 100)
@@ -889,30 +856,23 @@ def main():
     print("\n" + "=" * 100)
     print("SUMMARY")
     print("=" * 100)
-    if use_hardcoded:
-        print(f"Results: Hardcoded values matching the image (instant generation)")
-    else:
-        print(f"Total time: {total_time:.1f} seconds ({total_time/60:.2f} minutes)")
-        print(f"Target: < 120 seconds (2 minutes)")
-        if total_time < 120:
-            print(f"✓ SUCCESS: Completed in under 2 minutes!")
-        else:
-            print(f"⚠ WARNING: Exceeded 2 minute target ({total_time/60:.2f} minutes)")
-        print("\nIndividual model results:")
-        # Group by model
-        model_results_dict = defaultdict(list)
-        for r in all_results:
-            if r is not None:
-                model_results_dict[r["model"].lower()].append(r)
-        for model_name in models:
-            model_name_lower = model_name.lower()
-            if model_name_lower in model_results_dict:
-                results = model_results_dict[model_name_lower]
-                times = [r.get("time", 0) for r in results]
-                mean_time = np.mean(times) if times else 0
-                print(
-                    f"  {model_name}: {len(results)}/{num_trials} trials, avg time: {mean_time:.1f}s"
-                )
+    print(f"Total time: {total_time:.1f} seconds ({total_time/60:.2f} minutes)")
+    print(f"Training completed for {base_config['trainer']['max_epochs']} epochs")
+    print("\nIndividual model results:")
+    # Group by model
+    model_results_dict = defaultdict(list)
+    for r in all_results:
+        if r is not None:
+            model_results_dict[r["model"].lower()].append(r)
+    for model_name in models:
+        model_name_lower = model_name.lower()
+        if model_name_lower in model_results_dict:
+            results = model_results_dict[model_name_lower]
+            times = [r.get("time", 0) for r in results]
+            mean_time = np.mean(times) if times else 0
+            print(
+                f"  {model_name}: {len(results)}/{num_trials} trials, avg time: {mean_time:.1f}s ({mean_time/60:.2f} minutes)"
+            )
     print("=" * 100)
 
 

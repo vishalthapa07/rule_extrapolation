@@ -753,7 +753,10 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
 
         # add SOS
         prompts = torch.cat(
-            (torch.ones((prompts.shape[0], 1), dtype=torch.long) * SOS_token, prompts),
+            (
+                torch.ones((prompts.shape[0], 1), dtype=torch.long) * SOS_token.item(),
+                prompts,
+            ),
             dim=1,
         )
     elif grammar == "aNbNcN":
@@ -762,7 +765,10 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
 
         # add SOS
         prompts = torch.cat(
-            (torch.ones((prompts.shape[0], 1), dtype=torch.long) * SOS_token, prompts),
+            (
+                torch.ones((prompts.shape[0], 1), dtype=torch.long) * SOS_token.item(),
+                prompts,
+            ),
             dim=1,
         )
     elif grammar == "bbaN":
@@ -783,13 +789,16 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             dtype=torch.long,
         )
         id_prompts = torch.cat(
-            (torch.ones((ID_data.shape[0], 1), dtype=torch.long) * SOS_token, ID_data),
+            (
+                torch.ones((ID_data.shape[0], 1), dtype=torch.long) * SOS_token.item(),
+                ID_data,
+            ),
             dim=1,
         )
         ood_prompts = torch.cat(
             (
-                torch.ones((OOD_data.shape[0], 1), dtype=torch.long) * SOS_token,
-                torch.ones((OOD_data.shape[0], 1), dtype=torch.long) * A_token,
+                torch.ones((OOD_data.shape[0], 1), dtype=torch.long) * SOS_token.item(),
+                torch.ones((OOD_data.shape[0], 1), dtype=torch.long) * A_token.item(),
                 OOD_data,
             ),
             dim=1,
@@ -809,9 +818,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_PARENTHESIS_token,
+                * CLOSING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -821,9 +830,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_PARENTHESIS_token,
+                * CLOSING_PARENTHESIS_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -843,9 +852,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_BRACKET_token,
+                * CLOSING_BRACKET_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -855,9 +864,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_BRACKET_token,
+                * CLOSING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -886,9 +895,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 id_brackets_data[:, 0].view(-1, 1),
                 torch.ones((id_brackets_data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 torch.ones((id_brackets_data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 id_brackets_data[:, 1:-1],
             ),
             dim=1,
@@ -897,9 +906,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 id_parentheses_data[:, 0].view(-1, 1),
                 torch.ones((id_parentheses_data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 torch.ones((id_parentheses_data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 id_parentheses_data[:, 1:-1],
             ),
             dim=1,
@@ -919,9 +928,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 ood_data[:, 0].view(-1, 1),
                 torch.ones((ood_data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 torch.ones((ood_data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 ood_data[:, 1:-1],
             ),
             dim=1,
@@ -943,9 +952,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_PARENTHESIS_token,
+                * CLOSING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -955,9 +964,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -979,9 +988,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * CLOSING_PARENTHESIS_token,
+                * CLOSING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,
@@ -991,9 +1000,9 @@ def generate_test_prompts(length: int = 6, grammar: str = "aNbN"):
             (
                 data[:, 0].view(-1, 1),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_PARENTHESIS_token,
+                * OPENING_PARENTHESIS_token.item(),
                 torch.ones((data.shape[0], 1), dtype=torch.long)
-                * OPENING_BRACKET_token,
+                * OPENING_BRACKET_token.item(),
                 data[:, 1:-1],
             ),
             dim=1,

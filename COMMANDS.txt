@@ -10,4 +10,4 @@ python3 run_all_models_l5.py
 # Method 3: Run transformer only (faster)
 python3 run_transformer_l5.py
 
-# All commands should complete in under 2 minutes
+# Training runs for 5000 epochs with full dataset

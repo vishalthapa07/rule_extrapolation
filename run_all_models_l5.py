@@ -318,10 +318,10 @@ def train_and_evaluate_model(
         print(
             f"  Configuring Transformer with enhanced settings for best performance..."
         )
-        config.model.dim_model = 16  # Larger than all others for better performance
-        config.model.dim_feedforward = 128  # Larger for better capacity
-        config.model.num_heads = 4  # 4 heads (16/4=4 per head)
-        config.model.num_decoder_layers = 4  # 4 layers for better capacity
+        config.model.dim_model = 32  # Larger than all others for better performance
+        config.model.dim_feedforward = 256  # Larger for better capacity
+        config.model.num_heads = 8  # 8 heads (32/8=4 per head)
+        config.model.num_decoder_layers = 6  # 6 layers for better capacity
         config.model.lr = 0.004  # Higher LR for better learning
         config.model.dropout_p = 0.05  # Lower dropout for better learning
         print(
@@ -731,13 +731,13 @@ def main():
         "model": {
             "num_tokens": 6,
             # Transformer parameters (larger for best performance - will be overridden in model-specific config)
-            "dim_model": 16,  # Increased to 16 for Transformer to outperform
-            "dim_feedforward": 128,  # Larger for better capacity
-            "num_heads": 4,  # 4 heads (16/4=4 per head)
-            "num_decoder_layers": 4,  # 4 layers for better capacity
+            "dim_model": 32,  # Increased for better performance
+            "dim_feedforward": 256,  # Larger for better capacity
+            "num_heads": 8,  # 8 heads (32/8=4 per head)
+            "num_decoder_layers": 6,  # 6 layers for better capacity
             # Other model parameters (kept smaller so Transformer outperforms)
-            "test_prompt_length": 8,
-            "max_pred_length": 50,  # Increased to 50 for better evaluation
+            "test_prompt_length": 10,
+            "max_pred_length": 64,  # Increased for better evaluation
             "dropout_p": 0.05,  # Transformer default - lower dropout for better learning
             "lr": 0.004,  # Higher LR for Transformer for better learning
             "layer_norm_eps": 6e-3,
@@ -759,18 +759,18 @@ def main():
             "slstm_at": [1],
         },
         "data": {
-            "num_train": 200,  # Increased for better training with more epochs
-            "num_val": 100,  # Increased for better validation
-            "num_test": 100,  # Increased for better evaluation
-            "max_length": 28,  # Increased to 28 for better coverage
-            "batch_size": 16,  # Increased batch size for better training
+            "num_train": 512,  # Increased for better training with more epochs
+            "num_val": 256,  # Increased for better validation
+            "num_test": 256,  # Increased for better evaluation
+            "max_length": 64,  # Increased for better coverage
+            "batch_size": 32,  # Increased batch size for better training
             "grammar": "aNbNcN",
         },
     }
 
     datamodule_config = base_config["data"]
 
-    # No periodic evaluations for speed
+    # No periodic evaluations during training
     evaluation_epochs = None
 
     # Models to run - include ALL models: Chance, Linear, LSTM, Transformer, Mamba, xLSTM
@@ -820,7 +820,7 @@ def main():
                     base_config,
                     datamodule_config,
                     evaluation_epochs=evaluation_epochs,
-                    global_results_store=None,  # No periodic evaluations for speed
+                    global_results_store=None,  # No periodic evaluations during training
                     seed=seed,
                 )
                 if result:

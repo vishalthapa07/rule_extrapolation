@@ -2,7 +2,7 @@
 
 ## ✅ All Models Now Working on CPU!
 
-All 5 models (Transformer, Linear, LSTM, Mamba, xLSTM) are now configured to run on CPU under 2 minutes.
+All 5 models (Transformer, Linear, LSTM, Mamba, xLSTM) are now configured to run on CPU.
 
 ## Run All Models
 
@@ -32,7 +32,7 @@ python3 run_all_models_l5.py
 
 ## Performance
 
-Total runtime: ~2 minutes for all 5 models
+Total runtime varies based on configuration and hardware
 - Transformer: ~25 seconds
 - Linear: ~9 seconds
 - LSTM: ~12 seconds
@@ -41,19 +41,19 @@ Total runtime: ~2 minutes for all 5 models
 
 ## Configuration
 
-All models use the same fast configuration:
-- 20 epochs
-- 3 training batches per epoch
-- 1 validation batch per epoch
-- Small model sizes for speed
-- Reduced dataset size
+All models use optimized configuration:
+- 5000 epochs
+- Full training batches
+- Full validation batches
+- Optimized model sizes
+- Full dataset size
 
 ## Notes
 
 - All models run on CPU (no GPU required)
 - xLSTM uses mLSTM-only configuration on CPU (sLSTM blocks require CUDA)
 - Results are rounded to 3 decimal places
-- Models are optimized for speed, not accuracy
+- Models are optimized for accuracy and performance
 
 ## Troubleshooting
 

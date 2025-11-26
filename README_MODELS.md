@@ -72,11 +72,11 @@ python3 run_transformer_l5.py
 
 ## Configuration
 
-The script uses optimized settings for fast execution (~2 minutes total):
-- 20 epochs per model
-- 3 training batches per epoch
-- 1 validation batch per epoch
-- Small model sizes and dataset
+The script uses optimized settings for training:
+- 5000 epochs per model
+- Full training batches
+- Full validation batches
+- Optimized model sizes and dataset
 
 For better accuracy, modify the configuration in `run_all_models_l5.py`.
 
@@ -97,8 +97,8 @@ For better accuracy, modify the configuration in `run_all_models_l5.py`.
 
 ## Notes
 
-- All models run with the same fast configuration for consistency
+- All models run with the same optimized configuration for consistency
 - Results are rounded to 3 decimal places
-- Total runtime is approximately 1-2 minutes for all available models
+- Total runtime varies based on configuration and hardware
 - Models that can't run (missing dependencies or hardware) are automatically skipped
 

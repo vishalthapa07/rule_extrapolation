@@ -27,11 +27,11 @@ python3 run_all_models_l5.py
 
 ## Configuration
 
-The script uses optimized settings for fast execution (~2 minutes total):
-- 20 epochs per model
-- 3 training batches per epoch
-- 1 validation batch per epoch
-- Small model sizes and dataset
+The script uses optimized settings for training:
+- 5000 epochs per model
+- Full training batches
+- Full validation batches
+- Optimized model sizes and dataset
 
 ## Results Format
 
@@ -47,6 +47,6 @@ All values are rounded to 3 decimal places.
 ## Notes
 
 - The script automatically skips models that are not available or require unavailable hardware (e.g., xLSTM on CPU-only systems)
-- Training uses reduced parameters for speed; for better accuracy, modify the configuration in the script
-- Total runtime is approximately 1-2 minutes for all models
+- Training uses optimized parameters for accuracy; modify the configuration in the script as needed
+- Total runtime varies based on configuration and hardware
 

@@ -143,4 +143,4 @@ python3 run_all_models_l5.py
 - The script automatically skips unavailable models
 - Results table will show "N/A" for skipped models
 - All available models run with the same configuration for consistency
-- Total runtime is ~1-2 minutes for all available models
+- Total runtime varies based on configuration and hardware

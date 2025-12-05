@@ -1,14 +1,17 @@
+# Configuration aligned with paper: "Rule Extrapolation in Language Models"
+# Paper Section 3.4: Implementation Details
+# Paper Section 6: Model Improvements
+
 seed_everything: true
 
 trainer:
   strategy: auto
   num_nodes: 1
-  accelerator: cpu
+  accelerator: mps  # Use Apple Silicon GPU for faster training
   devices: 1
   precision: 32
   num_sanity_val_steps: 0
   use_distributed_sampler: false
-  # optional for faster debugging:
   detect_anomaly: false
   log_every_n_steps: 1
 
@@ -27,36 +30,39 @@ trainer:
         mode: min
 
   fast_dev_run: false
-  max_epochs: 500
-  check_val_every_n_epoch: 250
+  max_epochs: 5000  # Paper: "100,000 update steps"
+  check_val_every_n_epoch: 1  # Run validation every epoch for ReduceLROnPlateau to work properly
 
-  num_sanity_val_steps: 0      # ✅ avoids MPS warmup crash
   enable_progress_bar: true
   enable_model_summary: true
   enable_checkpointing: true
-  detect_anomaly: true
-  use_distributed_sampler: false
 
 model:
+  # Paper Section 3.4: "Transformer used four self-attention layers with eight heads 
+  # and an embedding dimension of 256"
   num_tokens: 6
-  dim_model: 8
-  dim_feedforward: 128
-  num_heads: 4
+  dim_model: 256  # Paper: embedding dimension 256
+  dim_feedforward: 256
+  num_heads: 8  # Paper: 8 heads
   test_prompt_length: 6
   max_pred_length: 64
-  num_decoder_layers: 2
-  dropout_p: 0.1
-  lr: 0.01
+  num_decoder_layers: 4  # Paper: 4 self-attention layers
+  dropout_p: 0.1  # Paper: dropout 0.1-0.2
+  lr: 0.0001  # Paper Section 3.4: "learning rate of 10^-4"
   layer_norm_eps: 2e-4
   model: transformer
+  optimizer: adam  # Paper: "Adam optimizer"
+  use_lr_scheduler: true
+  lr_scheduler_type: reduce_on_plateau  # Paper Section 6 improvement
 
 data:
   num_train: 512
   num_val: 512
   num_test: 512
   max_length: 512
-  batch_size: 128
+  batch_size: 64  # Paper Section 3.4: "batch size of 64"
   grammar: aNbNcN
+  max_num_workers: 8  # Paper Section 6: "8 workers"
 
 notes: null
 tags: null

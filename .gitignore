@@ -159,3 +159,52 @@ evaluation_*.txt
 L5_all_models_results*.txt
 all_models_results.txt
 training_results_summary.md
+
+# Documentation files (auto-generated or unnecessary)
+ACCURACY_IMPROVEMENT_TIPS.md
+ALL_MODELS_TRAINING.md
+CODE_FLOW_EXAMPLE.md
+CURRENT_MODEL_ARCHITECTURES.md
+FINAL_RESULTS.md
+FIXES_APPLIED.md
+HOW_IT_WORKS.md
+L5_TRAINING_STATUS.md
+MODEL_ARCHITECTURES.md
+QUICK_START.md
+README_MODELS.md
+RUN_ALL_MODELS.md
+SETUP_MODELS.md
+TRAINING_STATUS.md
+COMMANDS.txt
+
+# Result and output files
+*.png
+*.svg
+*.jpg
+*.jpeg
+L5_*_training_curves.png
+L5_*_smooth_training_curves.png
+TRAINING_REPORT_*.png
+fig*.png
+
+# Python cache and build artifacts
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.backup

@@ -1,7 +1,15 @@
+# LSTM configuration aligned with paper Section 3.3 and 3.4
+# Paper: "RNN and LSTM models shared equivalent hidden sizes"
+# Paper: "gradient clipping with a threshold of 1.0 to avoid exploding gradients"
+
+trainer:
+  gradient_clip_val: 1.0  # Paper Section 3.4: "gradient clipping threshold of 1.0"
 
 model:
-  embedding_dim: 16 #32
-  hidden_dim: 64 #128
-  num_layers: 5 #3
+  embedding_dim: 32  # Paper: equivalent to dim_model for fair comparison
+  hidden_dim: 128
+  num_layers: 4  # Paper: equivalent layers for fair comparison
   dropout: 0.4
   model: lstm
+  optimizer: adam
+  lr: 0.0001  # Paper: learning rate 10^-4

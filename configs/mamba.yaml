@@ -1,7 +1,12 @@
+# Mamba (State Space Model) configuration aligned with paper Section 3.3
+# Paper: "Mamba architecture represents a modern class of Selective State Space Models 
+# that replace the attention mechanism with efficient state-space transitions"
 
 model:
-  n_layers: 15
+  n_layers: 4  # Paper: comparable depth across architectures
   d_state: 16
-  d_conv: 8
+  d_conv: 4
   d_model: 32
   model: mamba
+  optimizer: adam
+  lr: 0.0001  # Paper: learning rate 10^-4

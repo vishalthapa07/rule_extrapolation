@@ -68,13 +68,16 @@ def create_pad_mask(
 
 
 class TransformerDecoder(nn.Module):
-    # Constructor
+    """
+    Decoder-only Transformer architecture for autoregressive language modeling.
+    Uses TransformerEncoder layers with causal masking to implement decoder-only behavior.
+    """
     def __init__(
         self,
         num_tokens: int = 6,
-        dim_model: int = 8,
-        num_heads: int = 4,
-        num_decoder_layers: int = 2,
+        dim_model: int = 256,
+        num_heads: int = 8,
+        num_decoder_layers: int = 4,
         dropout_p: float = 0.1,
         dim_feedforward: int = 256,
         layer_norm_eps: float = 2e-4,
@@ -89,8 +92,6 @@ class TransformerDecoder(nn.Module):
             torch.tensor(relu_rescale), requires_grad=False
         )
 
-        # LAYERS
-        # Increased max_len to handle longer sequences during prediction
         self.positional_encoder = PositionalEncoding(
             dim_model=dim_model, dropout_p=dropout_p, max_len=10000
         )
@@ -102,20 +103,24 @@ class TransformerDecoder(nn.Module):
             dropout=dropout_p,
             dim_feedforward=dim_feedforward,
             layer_norm_eps=layer_norm_eps,
+            activation='gelu',
+            norm_first=True,
         )
-
-        if self.relu_rescale > 0 and self.relu_rescale != 1.0:
-            layer.activation = (
-                lambda x: F.relu(x * self.relu_rescale) / self.relu_rescale
-            )
 
         self.decoder = nn.TransformerEncoder(layer, num_decoder_layers)
 
         self.out = nn.Linear(dim_model, num_tokens)
+        self._init_weights()
             
         # Ensure all submodules are on the correct device
         if torch.backends.mps.is_available():
             self.to(torch.device("mps"))
+    
+    def _init_weights(self):
+        """Initialize weights using Xavier uniform initialization."""
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
 
     def forward(self, src, mask=None, src_key_padding_mask=None):
         # Src size must be (batch_size, src sequence length)
@@ -210,7 +215,7 @@ class LinearLLM(nn.Module):
 
 
 class LSTM_LLM(nn.Module):
-    # Constructor
+    """LSTM-based Language Model."""
     def __init__(
         self,
         num_tokens: int = 6,
@@ -223,9 +228,19 @@ class LSTM_LLM(nn.Module):
         super(LSTM_LLM, self).__init__()
 
         self.embedding = nn.Embedding(num_tokens, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout_lstm if num_layers > 1 else 0)
         self.dropout = nn.Dropout(dropout_lstm)
         self.fc = nn.Linear(hidden_dim, num_tokens)
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize weights using Xavier uniform initialization."""
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if param.dim() > 1:
+                    nn.init.xavier_uniform_(param)
+            elif 'bias' in name:
+                nn.init.zeros_(param)
 
     def forward(self, src):
         src = src.to(self.embedding.weight.device)

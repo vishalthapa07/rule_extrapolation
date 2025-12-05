@@ -22,9 +22,7 @@ from rule_extrapolation.dataset import GrammarDataset
 
 
 class GrammarDataModule(pl.LightningDataModule):
-    """
-    DataModule for sequence data coming from an underlying PCFG grammar.
-    """
+    """DataModule for sequence data coming from an underlying PCFG grammar."""
 
     def __init__(
         self,
@@ -35,7 +33,7 @@ class GrammarDataModule(pl.LightningDataModule):
         all_sequences: bool = True,
         batch_size: int = 64,
         grammar: str = "aNbN",
-        max_num_workers: int = 4,
+        max_num_workers: int = 8,
     ):
         """
 

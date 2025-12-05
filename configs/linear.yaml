@@ -1,4 +1,10 @@
+# Linear Model configuration aligned with paper Section 3.3
+# Paper: "The linear model serves as a minimal-capacity baseline that processes 
+# each token independently, without recurrence, attention, or any nonlinear transformations"
+
 model:
   max_data_length: 256
   bias: True
   model: linear
+  optimizer: adam
+  lr: 0.0001  # Paper: learning rate 10^-4

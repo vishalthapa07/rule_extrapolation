@@ -1,3 +1,11 @@
+# xLSTM configuration aligned with paper Section 3.3 (xLSTM Model)
+# Paper: "xLSTM extends the traditional LSTM architecture by introducing 
+# matrix-valued memory cells, multiplicative gating mechanisms"
+# Paper Section 3.4: "gradient clipping with a threshold of 1.0"
+# Paper Section 3.4: "dropout rates of 0.1 to 0.2"
+
+trainer:
+  gradient_clip_val: 1.0  # Paper Section 3.4: gradient clipping threshold
 
 model:
   model: xlstm
@@ -18,3 +26,6 @@ model:
   num_blocks: 7
   xlstm_embedding_dim: 128
   slstm_at: [ 1 ]
+  dropout_p: 0.1  # Paper: "dropout rates of 0.1 to 0.2"
+  optimizer: adam
+  lr: 0.0001  # Paper: learning rate 10^-4

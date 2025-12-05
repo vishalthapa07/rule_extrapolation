@@ -1,118 +1,105 @@
-# How to clone?
+Rule Extrapolation in Language Models
 
-### Github warning !!
+Testing how neural networks generalize rules when things go wrong.
 
-```bash
-# Please donot push anthing or merge code in develop and main branch, create your own separate branch and push code in it
-```
+What's this about?
 
-### Cloning project
-
-```bash
-git clone https://github.com/vishalthapa07/rule_extrapolation.git
-```
-
-- Setup virtual environment
-
-```bash
-# install venv
-sudo apt install python3-venv
-
-# creating virtual env with name venv
-python3 -m venv venv
-
-# activate virtual env
-source venv/bin/activate
-```
-
-- Run basic commands
-
-```bash
-pip install -e .
-pip install -r requirements.txt
-pip install --requirement tests/requirements.txt --quiet
-pre-commit install
-```
-
-- To run weight and bias
-
-```bash
-pip install
-
-# shows username
-wandb login
-
-# which yaml file you need to run, for eg- adversarial.yaml, replace it with your file name
-wandb sweep sweeps/adversarial.yaml
-# output of above line:
-# wandb: Creating sweep with ID: xmghavqr
-# wandb: View sweep at: https://wandb.ai/rule-extrapolation-learning/rule_extrapolation/sweeps/xmghavqr
-# wandb: Run sweep agent with: wandb agent rule-extrapolation-learning/rule_extrapolation/xmghavqr
-
-# To run in terminal use above wandb: Run sweep agent with:line
-wandb agent rule-extrapolation-learning/rule_extrapolation/xmghavqr
-
-```
-
-OR
-
-<div align="center">    
- 
-# Rule Extrapolation in Large Language Models+
-
-[//]: # "[![Paper](http://img.shields.io/badge/arxiv-cs.LG:2311.18048-B31B1B.svg)](https://arxiv.org/abs/2311.18048)"
-[//]: # "[![Conference](http://img.shields.io/badge/CI4TS@UAI-2023.svg)](https://sites.google.com/view/ci4ts2023/accepted-papers?authuser=0)"
-
-![CI testing](https://github.com/meszarosanna/rule_extrapolation/workflows/CI%20testing/badge.svg?branch=main&event=push)
-
-</div>
- 
-## Description
-
-## How to run
-
-### Installing dependencies
-
-```bash
-# clone the repo with submodules
-git clone --recurse-submodules https://github.com/meszarosanna/rule_extrapolation
+We train models on sequences that follow two rules (like "equal a's and b's" + "a's come before b's"). Then we test them with broken inputs where one rule is violated. Can they still follow the other rule? That's rule extrapolation.
 
 
-# install the package
-cd rule_extrapolation
-pip install -e .
-pip install -r requirements.txt
+Setup
+
+Create a virtual environment and activate it:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+Install dependencies:
+
+    pip install -r requirements.txt
+    pip install -e .
 
 
+Training
 
-# install requirements for tests
-pip install --requirement tests/requirements.txt --quiet
+Basic run with Transformer:
 
-# install pre-commit hooks (only necessary for development)
-pre-commit install
-```
+    python -m rule_extrapolation.cli fit --config configs/config.yaml
 
-### Weights and Biases sweep
+For LSTM:
 
-```bash
-# login to weights and biases
-wandb login
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/lstm.yaml
 
-# create sweep [spits out <sweepId>]
-wandb sweep sweeps/<configFile>.yaml
+For xLSTM:
 
-# run sweep
-./scripts/sweeps <sweepId>
-```
-to run without GPU 
-python rule_extrapolation/cli.py fit --config configs/config.yaml --trainer.accelerator=cpu
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/xlstm.yaml
 
-## Citation
+For Mamba:
 
-```
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/mamba.yaml
 
-@inproceedings{
+For Linear baseline:
 
-}
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/linear.yaml
 
-```
+
+Grammars
+
+You can change the grammar in the config file or pass it via command line:
+
+aNbN - equal a's and b's, a's first (context-free)
+aNbNcN - equal a's, b's, c's in order (context-sensitive, L5)
+baN - starts with b, even number of a's (regular)
+parentheses_and_brackets - matched () and [] (Dyck language)
+
+Example with aNbNcN grammar:
+
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --data.grammar=aNbNcN
+
+
+GPU
+
+For Mac with Apple Silicon, set accelerator to mps in config.yaml under trainer section.
+For NVIDIA GPUs, set accelerator to gpu.
+
+
+Evaluation
+
+After training, checkpoints are saved in lightning_logs folder. To evaluate:
+
+    python evaluate_model.py --checkpoint lightning_logs/version_X/checkpoints/best.ckpt
+
+
+Project Structure
+
+rule_extrapolation/cli.py - training entry point
+rule_extrapolation/model.py - Transformer, LSTM, Linear models
+rule_extrapolation/runner.py - training loop and metrics
+rule_extrapolation/data.py - grammar generators and rule checkers
+rule_extrapolation/datamodule.py - data loading
+configs/config.yaml - main configuration
+configs/lstm.yaml, xlstm.yaml, mamba.yaml, linear.yaml - model-specific overrides
+
+
+Key Parameters
+
+lr: 0.0001 (learning rate)
+batch_size: 64
+max_epochs: 5000
+dim_model: 256 (embedding dimension)
+num_heads: 8 (attention heads)
+num_decoder_layers: 4 (transformer layers)
+
+
+Troubleshooting
+
+If you get "No module named pytorch_lightning", run pip install -r requirements.txt
+
+If training is slow, enable GPU in config (accelerator: mps or gpu) or reduce max_pred_length.
+
+If you run out of memory, lower batch_size or dim_model.
+
+
+Citation
+
+Based on the NeurIPS 2024 paper on rule extrapolation in language models.

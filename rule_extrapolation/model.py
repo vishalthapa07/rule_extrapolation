@@ -68,14 +68,27 @@ def create_pad_mask(
 
 
 class TransformerDecoder(nn.Module):
+    """
+    Decoder-only Transformer architecture for autoregressive language modeling.
+    Uses TransformerEncoder layers with causal masking to implement decoder-only behavior.
+    
+    Paper Section 3.4 Implementation Details:
+    - Implements pre-normalization architecture (norm_first=True)
+    - Uses GELU activation (Section 6: "1.1-1.2× faster convergence")
+    - Uses sinusoidal positional encodings
+    - Xavier uniform initialization for stable training
+    
+    Paper Section 3.4: "The Transformer used four self-attention layers with eight 
+    heads and an embedding dimension of 256"
+    """
     # Constructor
     def __init__(
         self,
         num_tokens: int = 6,
-        dim_model: int = 8,
-        num_heads: int = 4,
-        num_decoder_layers: int = 2,
-        dropout_p: float = 0.1,
+        dim_model: int = 256,  # Paper: embedding dimension 256
+        num_heads: int = 8,    # Paper: 8 heads
+        num_decoder_layers: int = 4,  # Paper: 4 self-attention layers
+        dropout_p: float = 0.1,  # Paper: dropout 0.1-0.2
         dim_feedforward: int = 256,
         layer_norm_eps: float = 2e-4,
         relu_rescale: float = 1.0,
@@ -90,6 +103,7 @@ class TransformerDecoder(nn.Module):
         )
 
         # LAYERS
+        # Paper Section 3.4: "The positional encodings were sinusoidal"
         self.positional_encoder = PositionalEncoding(
             dim_model=dim_model, dropout_p=dropout_p, max_len=5000
         )
@@ -101,20 +115,29 @@ class TransformerDecoder(nn.Module):
             dropout=dropout_p,
             dim_feedforward=dim_feedforward,
             layer_norm_eps=layer_norm_eps,
+            activation='gelu',  # Paper Section 6: GELU for "smoother gradients, 1.1-1.2× faster convergence"
+            norm_first=True,  # Paper Section 6: Pre-normalization "1.2-1.5× faster convergence"
         )
-
-        if self.relu_rescale > 0 and self.relu_rescale != 1.0:
-            layer.activation = (
-                lambda x: F.relu(x * self.relu_rescale) / self.relu_rescale
-            )
 
         self.decoder = nn.TransformerEncoder(layer, num_decoder_layers)
 
         self.out = nn.Linear(dim_model, num_tokens)
+        
+        # Paper Section 3.4: "weight initialization was done after Xavier uniform 
+        # initialization which guarantees convergence between architectures"
+        self._init_weights()
             
         # Ensure all submodules are on the correct device
         if torch.backends.mps.is_available():
             self.to(torch.device("mps"))
+    
+    def _init_weights(self):
+        """
+        Initialize weights using Xavier uniform initialization as per paper Section 3.4.
+        """
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
 
     def forward(self, src, mask=None, src_key_padding_mask=None):
         # Src size must be (batch_size, src sequence length)
@@ -209,6 +232,18 @@ class LinearLLM(nn.Module):
 
 
 class LSTM_LLM(nn.Module):
+    """
+    LSTM-based Language Model.
+    
+    Paper Section 3.3 (LSTM Model): "The Long Short-Term Memory (LSTM) network 
+    introduces gating mechanisms—input, forget, and output gates—that enable it 
+    to store, update, and selectively retain information over long sequences."
+    
+    Paper Section 3.4: 
+    - "RNN and LSTM models shared equivalent hidden sizes for fair comparison"
+    - "gradient clipping with a threshold of 1.0 to avoid exploding gradients"
+    - Xavier uniform initialization
+    """
     # Constructor
     def __init__(
         self,
@@ -222,9 +257,23 @@ class LSTM_LLM(nn.Module):
         super(LSTM_LLM, self).__init__()
 
         self.embedding = nn.Embedding(num_tokens, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True)
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout_lstm if num_layers > 1 else 0)
         self.dropout = nn.Dropout(dropout_lstm)
         self.fc = nn.Linear(hidden_dim, num_tokens)
+        
+        # Paper Section 3.4: Xavier uniform initialization
+        self._init_weights()
+    
+    def _init_weights(self):
+        """
+        Initialize weights using Xavier uniform initialization as per paper Section 3.4.
+        """
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if param.dim() > 1:
+                    nn.init.xavier_uniform_(param)
+            elif 'bias' in name:
+                nn.init.zeros_(param)
 
     def forward(self, src):
         src = src.to(self.embedding.weight.device)

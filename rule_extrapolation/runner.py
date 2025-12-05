@@ -15,11 +15,12 @@ from dacite import Config as DaciteConfig
 from dacite import from_dict
 from omegaconf import OmegaConf
 from transformers.optimization import get_inverse_sqrt_schedule
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from xlstm import xLSTMLMModel, xLSTMLMModelConfig
 from xlstm.blocks.mlstm.block import mLSTMBlock, mLSTMBlockConfig
 from xlstm.blocks.slstm.block import sLSTMBlock, sLSTMBlockConfig
 
-# from mamba.mamba_lm import MambaLM, MambaLMConfig
+# Mamba imports handled conditionally in _setup_model
 from rule_extrapolation.data import (
     check_parity,
     check_same_number_as_bs,
@@ -53,7 +54,6 @@ from rule_extrapolation.model import (
     LinearLLM,
     LSTM_LLM,
 )
-from pytorch_lightning.loggers import WandbLogger
 
 
 class LightningGrammarModule(pl.LightningModule):
@@ -99,6 +99,12 @@ class LightningGrammarModule(pl.LightningModule):
         num_blocks=7,
         xlstm_embedding_dim=128,
         slstm_at=[1],
+        # New parameters as per paper Section 3.4 and Section 6 (Model Improvements)
+        use_lr_scheduler: bool = True,
+        lr_scheduler_type: str = "inverse_sqrt",  # Options: "inverse_sqrt", "reduce_on_plateau"
+        lr_scheduler_patience: int = 10,  # For ReduceLROnPlateau
+        lr_scheduler_factor: float = 0.5,  # For ReduceLROnPlateau
+        gradient_clip_val: float = 1.0,  # Gradient clipping threshold (paper Section 3.4)
     ):
         """
         :param optimizer:
@@ -214,8 +220,6 @@ class LightningGrammarModule(pl.LightningModule):
                 raise ImportError("Mamba model requires mamba-ssm package. Install with: pip install mamba-ssm")
 
         elif self.hparams.model == "xlstm":
-            # Use CPU backend since we're training on CPU
-            backend = "cpu" if self.hparams.device == "cpu" or not torch.cuda.is_available() else "cuda"
             xlstm_cfg = f""" 
             vocab_size: {self.hparams.num_tokens}
             mlstm_block:
@@ -225,7 +229,7 @@ class LightningGrammarModule(pl.LightningModule):
                 num_heads: 4
             slstm_block:
               slstm:
-                backend: {backend}
+                backend: cuda
                 num_heads: 4
                 conv1d_kernel_size: 4
                 bias_init: powerlaw_blockdependent
@@ -245,11 +249,6 @@ class LightningGrammarModule(pl.LightningModule):
                 config=DaciteConfig(strict=True),
             )
 
-            # Initialize WandbLogger if configured to use it
-            if self.hparams.get('logger') and self.hparams.logger.get('class_path') == 'pytorch_lightning.loggers.WandbLogger':
-                wandb_init_args = self.hparams.logger.get('init_args', {})
-                self.logger = WandbLogger(**wandb_init_args)
-
             self.model: nn.Module = xLSTMLMModel(cfg)
 
     @property
@@ -257,24 +256,64 @@ class LightningGrammarModule(pl.LightningModule):
         return math.log(n := (self.hparams.max_data_length // 2), math.e) / n
 
     def configure_optimizers(self):
-        if self.hparams.optimizer == "adamw":
+        """
+        Configure optimizers and learning rate schedulers.
+        
+        Paper Section 3.4: "All models were trained using the Adam optimizer with 
+        a learning rate of 10^-4"
+        
+        Paper Section 6 (Model Improvements): "ReduceLROnPlateau scheduler, which 
+        automatically lowers the learning rate when the validation loss plateaus"
+        """
+        # Select optimizer (paper uses Adam with lr=10^-4)
+        if self.hparams.optimizer == "adam":
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.hparams.lr)
+        elif self.hparams.optimizer == "adamw":
             optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.hparams.lr)
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": get_inverse_sqrt_schedule(
-                    optimizer=optimizer, num_warmup_steps=self.hparams.num_warmup_steps
-                ),
-            }
         elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.model.parameters(), lr=self.hparams.lr)
-            return {"optimizer": optimizer}
         else:
             raise ValueError(f"Unknown optimizer: {self.hparams.optimizer}")
+        
+        # Configure learning rate scheduler
+        if not self.hparams.use_lr_scheduler:
+            return {"optimizer": optimizer}
+        
+        if self.hparams.lr_scheduler_type == "inverse_sqrt":
+            scheduler = get_inverse_sqrt_schedule(
+                optimizer=optimizer, num_warmup_steps=self.hparams.num_warmup_steps
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": scheduler,
+            }
+        elif self.hparams.lr_scheduler_type == "reduce_on_plateau":
+            # ReduceLROnPlateau as per paper Section 6 improvements
+            # "2-3× faster convergence" by lowering LR when validation loss plateaus
+            scheduler = ReduceLROnPlateau(
+                optimizer,
+                mode='min',
+                factor=self.hparams.lr_scheduler_factor,
+                patience=self.hparams.lr_scheduler_patience,
+                verbose=False,  # Deprecated parameter warning fix
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "monitor": "Val/loss",
+                    "interval": "epoch",
+                    "frequency": 1,
+                    "strict": False,  # Don't crash if Val/loss not available yet
+                },
+            }
+        else:
+            raise ValueError(f"Unknown lr_scheduler_type: {self.hparams.lr_scheduler_type}")
 
     def _setup_test_prompts(self) -> None:
         test_prompts = generate_test_prompts(
             grammar=self.hparams.grammar, length=self.hparams.test_prompt_length
-        ).to(self.device)
+        ).to(self.hparams.device)
 
         if (
             self.hparams.grammar != "parentheses_and_brackets"
@@ -336,7 +375,7 @@ class LightningGrammarModule(pl.LightningModule):
                 prompts.append(prompt.cpu().numpy())
 
             self.adversarial_prompts = (
-                torch.from_numpy(pad(prompts)).long().to(self.device)
+                torch.from_numpy(pad(prompts)).long().to(self.hparams.device)
             )
 
     def __setup_oracle_prompts(self) -> None:
@@ -368,7 +407,7 @@ class LightningGrammarModule(pl.LightningModule):
                 prompts.append(prompt.cpu().numpy())
 
             self.extrapolation_prompts = (
-                torch.from_numpy(pad(prompts)).long().to(self.device)
+                torch.from_numpy(pad(prompts)).long().to(self.hparams.device)
             )
 
     def _extend_prompt(self, prompt, length, value=A_token.item()):
@@ -378,13 +417,13 @@ class LightningGrammarModule(pl.LightningModule):
                 torch.ones(
                     (length,),
                     dtype=torch.long,
-                    device=self.device,
+                    device=self.hparams.device,
                 )
                 * value,
                 torch.ones(
                     (1,),
                     dtype=torch.long,
-                    device=self.device,
+                    device=self.hparams.device,
                 )
                 * EOS_token.item(),
             ),
@@ -483,22 +522,21 @@ class LightningGrammarModule(pl.LightningModule):
         self.log(f"{panel_name}/loss", loss)
 
         if self.hparams.adversarial_training is True:
-            # _, _, _, loss_adversarial = self._forward(
-            #     self.adversarial_prompts, completion_loss=True
-            # )
-            # self.log(f"{panel_name}/loss_adversarial", loss_adversarial)
+            _, _, _, loss_adversarial = self._forward(
+                self.adversarial_prompts, completion_loss=True
+            )
+            self.log(f"{panel_name}/loss_adversarial", loss_adversarial)
 
-            # with torch.no_grad():
-            #     _, _, _, loss_adversarial_full = self._forward(
-            #         self.adversarial_prompts, completion_loss=False
-            #     )
-            #     self.log(
-            #         f"{panel_name}/loss_adversarial_prompt",
-            #         loss_adversarial_full - loss_adversarial,
-            #     )
+            with torch.no_grad():
+                _, _, _, loss_adversarial_full = self._forward(
+                    self.adversarial_prompts, completion_loss=False
+                )
+                self.log(
+                    f"{panel_name}/loss_adversarial_prompt",
+                    loss_adversarial_full - loss_adversarial,
+                )
 
-            # loss += loss_adversarial
-            pass
+            loss += loss_adversarial
 
         if self.hparams.extrapolation_training is True:
             _, _, _, loss_extrapolation = self._forward(
@@ -524,7 +562,7 @@ class LightningGrammarModule(pl.LightningModule):
         length = 8
         prompts = []
         symbols = [A_token.item(), B_token.item()]
-        for i in range(1, length + 1): # type: ignore
+        for i in range(1, length + 1):
             sequences = torch.tensor(list(product(symbols, repeat=i)), dtype=torch.long)
             # add SOS
             sequences = torch.cat(
@@ -539,11 +577,9 @@ class LightningGrammarModule(pl.LightningModule):
 
         # calculate the probability of a sequence given by the model
         list_of_probab = []
-        for sequence in prompts: # type: ignore
-            prompt = torch.tensor(
-                [sequence[:-1]], dtype=torch.long, device=self.device
-            )
-            tgt_mask = get_tgt_mask(size=(prompt.size(1)), device=self.device)
+        for sequence in prompts:
+            prompt = torch.Tensor([sequence[:-1]]).long().to(self.hparams.device)
+            tgt_mask = get_tgt_mask(size=(prompt.size(1)), device=self.hparams.device)
 
             if self.hparams.model == "transformer":
                 pred = self.model(
@@ -555,28 +591,28 @@ class LightningGrammarModule(pl.LightningModule):
                 pred = self.model(src=prompt)
             elif self.hparams.model == "mamba":
                 pred = self.model(prompt)
-            elif self.hparams.model == "xlstm": 
-                pred = self.model(prompt)  # type: ignore
-                pred = pred.permute(0, 2, 1) # type: ignore
+            elif self.hparams.model == "xlstm":
+                pred = self.model(prompt)
+                pred = pred.permute(0, 2, 1)
                 # raise ValueError(f"shape of pred: {pred.shape}, pred {pred}")
 
             pred = pred.squeeze(0)
             pred = nn.functional.softmax(pred, dim=0)  # make the columns sum to 1
-            probability = 0  # type: ignore
-            for i, element in enumerate(sequence[1:], 1): # type: ignore
+            probability = 0
+            for i, element in enumerate(sequence[1:], 1):
                 probability += math.log(pred[element][i - 1])
 
             probability = math.exp(probability)
             list_of_probab.append([sequence, probability])
 
         # separate the list with the rules
-        rule1_met = [check_same_number_as_bs(np.array(t[0])) for t in list_of_probab]  # type: ignore
-        rule2_met = [check_as_before_bs(np.array(t[0])) for t in list_of_probab] # type: ignore
-       
+        rule1_met = [check_same_number_as_bs(np.array(t[0])) for t in list_of_probab]
+        rule2_met = [check_as_before_bs(np.array(t[0])) for t in list_of_probab]
+
         not_rule1_not_rule2 = []
         rule1_not_rule2 = []
         rule2_not_rule1 = []
-        rule1_and_rule2 = [] # type: ignore
+        rule1_and_rule2 = []
 
         # list of probabilities of each category
         for i, element in enumerate(list_of_probab):
@@ -736,7 +772,7 @@ class LightningGrammarModule(pl.LightningModule):
             torch.ones(
                 (self.hparams.batch_size, 1),
                 dtype=torch.long,
-                device=self.device,
+                device=self.hparams.device,
             )
             * SOS_token.item()
         )
@@ -778,7 +814,7 @@ class LightningGrammarModule(pl.LightningModule):
             prompt_pred_finished = [
                 p for p, f in zip(prompt_pred, finished) if f == True
             ]
-            for i, p in enumerate(prompt_pred_finished): # type: ignore
+            for i, p in enumerate(prompt_pred_finished):
                 first_eos = torch.where(p == EOS_token.item())[0][0]
                 prompt_pred_finished[i][first_eos:] = (
                     torch.ones_like(
@@ -897,7 +933,7 @@ class LightningGrammarModule(pl.LightningModule):
         X_expected = X[:, 1:]
 
         # Get mask to mask out the next words
-        causal_mask = get_tgt_mask(X_input.size(1), device=self.device)
+        causal_mask = get_tgt_mask(X_input.size(1), device=self.hparams.device)
 
         # Standard training except we pass in X_input and causal_mask
 
@@ -912,7 +948,7 @@ class LightningGrammarModule(pl.LightningModule):
         elif self.hparams.model == "mamba":
             pred = self.model(X_input)
         elif self.hparams.model == "xlstm":
-            pred = self.model(X_input) # type: ignore
+            pred = self.model(X_input)
             pred = pred.permute(0, 2, 1)
 
         if completion_loss is False:
@@ -959,17 +995,17 @@ class LightningGrammarModule(pl.LightningModule):
             prompt = torch.tensor(
                 [[0, 0, 0, 1]],
                 dtype=torch.long,
-                device=self.device,
+                device=self.hparams.device,  # type: ignore
             )
 
-        finished = torch.BoolTensor([False] * prompt.size(0)).to(self.device)
+        finished = torch.BoolTensor([False] * prompt.size(0)).to(self.hparams.device)
 
         if self.hparams.model == "linear" or "xlstm":
             max_length = self.hparams.max_data_length - prompt.shape[1]
 
         for _ in range(max_length):
             # Get mask to mask out the next words
-            tgt_mask = get_tgt_mask(size=(prompt.size(1)), device=self.device)
+            tgt_mask = get_tgt_mask(size=(prompt.size(1)), device=self.hparams.device)
 
             # forward pass
             if self.hparams.model == "transformer":
@@ -984,7 +1020,7 @@ class LightningGrammarModule(pl.LightningModule):
             elif self.hparams.model == "mamba":
                 pred = self.model(prompt)
             elif self.hparams.model == "xlstm":
-                pred = self.model(prompt) # type: ignore
+                pred = self.model(prompt)
                 pred = pred.permute(0, 2, 1)
 
             # pick the prediction for the last token only
@@ -996,7 +1032,7 @@ class LightningGrammarModule(pl.LightningModule):
             # Stop if model predicts end of sentence
             if torch.all(finished) is True:
                 break
-        return prompt.long().to(self.device)
+        return prompt.long().to(self.hparams.device)
 
     def _pick_next_tokens(self, pred: torch.Tensor) -> torch.Tensor:
         if self.hparams.next_token_pick_mode == "max":
@@ -1018,13 +1054,13 @@ class LightningGrammarModule(pl.LightningModule):
                 f"Unknown next_token_pick_mode: {self.hparams.next_token_pick_mode}, should be 'max' or 'sample'"
             )
 
-        return next_items.to(self.device)
+        return next_items.to(self.hparams.device)
 
     def on_fit_end(self) -> None:
         self._sync_wandb()
 
     def _sync_wandb(self):
-        if isinstance(self.logger, pl.loggers.wandb.WandbLogger) is True: # type: ignore
+        if isinstance(self.logger, pl.loggers.wandb.WandbLogger) is True:
             logger: pl.loggers.wandb.WandbLogger = self.logger  # type: ignore
             if self.hparams.offline is True:
                 # Syncing W&B at the end

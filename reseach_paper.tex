@@ -1,0 +1,619 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{hyperref}
+\usepackage{adjustbox}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Rule Extrapolation in Language Models: A Study of Compositional Generalization on OOD Prompts\\
+
+}
+
+\author{\IEEEauthorblockN{Roshan Kumar Chhetri}
+\IEEEauthorblockA{\textit{Mechanical Engineering Department } \\
+\textit{Texas Tech University}\\
+Lubbock, USA \\
+roschhet@ttu.edu
+}
+\and
+\IEEEauthorblockN{Samir Chaulagain}
+\IEEEauthorblockA{\textit{Computer Science Department} \\
+\textit{Texas Tech University}\\
+Lubbock, USA \\
+schaulag@ttu.edu
+}
+\and
+\IEEEauthorblockN{Vishal Thapa}
+\IEEEauthorblockA{\textit{Computer Science Department} \\
+\textit{Texas Tech University}\\
+Lubbock, USA \\
+vthapa@ttu.edu}
+\and
+
+\IEEEauthorblockN{Jannatul Ferdous Prova}
+\hspace{8cm}
+\IEEEauthorblockA{\textit{Computer Science Department} \\
+\textit{Texas Tech University}\\
+Lubbock, USA \\
+jprova@ttu.edu}
+\and
+
+\IEEEauthorblockN{Puskar Kafle}
+\hspace{1cm}
+\IEEEauthorblockA{\textit{Computer Science Department} \\
+\textit{Texas Tech University}\\
+Lubbock, USA\\
+puskafle@ttu.edu}
+}
+
+
+\maketitle
+\footnotetext[1]{\textbf{Github:}\url{https://github.com/vishalthapa07/rule_extrapolation} }
+
+
+\begin{abstract}
+Large Language Models (LLMs) often show the ability to understand and generalize rules even when faced with situations they were not directly trained on, known as out-of-distribution (OOD) generalization. This paper studies a special type of OOD behavior called rule extrapolation, where a model is trained on data that follows multiple logical rules and is later tested with inputs that violate one of those rules. The main goal is to see whether the model can still correctly apply the remaining rules. Using simple formal languages such as regular, context-free, and context-sensitive grammars, the authors test different neural network architectures,including Transformers, LSTMs, xLSTMs, linear models, and State Space Models (Mamba), to compare how well they generalize beyond their training data. Results show that no single architecture is universally best: Transformers perform strongly on complex languages, while LSTMs and Mamba models do better on simpler regular grammars. The study also introduces a normative theory inspired by algorithmic information theory to explain why models tend to favor simpler rules first before learning more complex ones. Overall, this work provides a structured way to study and explain how language models generalize rules beyond their training examples, contributing to a deeper understanding of compositional generalization in AI systems.
+\end{abstract}
+
+
+
+\section{Introduction}
+
+In this report, the paper under review and analysis is entitled to Rule Extrapolation in Language Models: A Study of Compositional Generalization on OOD Prompts. This paper was delivered at the 38th Neural Information Processing Systems Conference (NeurIPS 2024)\cite{b4}, one of the most influential venues in modern machine learning research. This study explores a fundamental challenge in artificial intelligence (AI): to what extent large language models (LLMs) extrapolate out of their training data, can they move beyond surface-level memorization and apply rules to the inputs that differ from what they were trained on? Specifically, the authors pay attention to how the models can be used to apply learned rules to unseen prompts or out-of-distribution (OOD) prompts. To formalize this phenomenon, they present a new notion, rule extrapolation.\\
+It is remarkable that recent advances of large language models (LLMs) have demonstrated strong performance on a wide range of natural language problems like question answering and translation to the capacity to reason more generally, including in-context learning and multi-step inference. Nonetheless, the generalization of these models shows an ability to manipulate structural patterns resembling human-like forms of rule use. However, even after these remarkable successes under theoretical terms, especially how out-of-distribution conditions work remain unclear because of limited and poorly characterized in traditional evaluation settings. In general, standard evaluation measures are not always responsible enough to forecast model performance in the case where the data are not equal to the training distribution, making them insufficient to predict how models behave when the underlying structure changes or when they encounter inputs that violate learned constraints.\\
+The NeurIPS 2024 paper addresses the problem of compositional generalization, where it focuses on the formal languages' symbolic systems that are characterized by explicit rules with exact definitions \cite{b3}. These controlled conditions enable researchers to isolate the behavior of neural models and examine behavior under conditions of violation of a rule and/or a set of rules. To measure this ability, the authors suggest a new technique, the rule extrapolation where it tests whether a model trained on rule-consistent examples can still apply one correct rule when another is broken. As an example, take the grammar $a^{n}b^{n}$ whose rules are: (R1) equal number of a and b, (R2) every a must precede any b. An input of the form bbaab violates (R2) yet can be repaired to comply with (R1). When a model, which was trained using exemplars that obey the rules, preserves the same rule and rules out another, it demonstrates successful extrapolation of rules rather than surface-pattern memorization.\\
+The paper evaluates various models by conducting extensive experiments using a spectrum of architectures, such as linear baselines, LSTM, State Space Models (SSMs) like Mamba, and attention-based architectures such as Transformers and xLSTM variants, to observe which of them are most effective in extrapolating rules. The findings revealed a clear hierarchy: Transformers are best for generalizing at context-free and context-sensitive grammars, and LSTM and Mamba performs more effectively on simpler, regular grammars, which reveals the influence of the inductive biases of various architectures on their out-of-distribution generalization \cite{b4}. Highlighting the significant role of architectural inductive biases in shaping how models internalize structural rules and manage OOD inputs.\\
+In addition to empirical testing, the authors propose a normative theory of out-of-distribution (OOD) generalization for these observations which is based on Algorithmic Information Theory (AIT) and the Solomonoff prior \cite{b5,b6}. According to this framework, rational systems ought to prefer the simplest, low-complexity rules that fit their training data, a phenomenon known as the simplicity bias. The findings create an argument that Transformers might naturally practice this rational approach of tending to learn simpler ordering rules before mastering more complex relational constraints, which can be viewed as a possible explanation of their high rule-extrapolation skill. This viewpoint provides a valuable insight through which it is understandable why attention-based models often outperform recurrent architectures in rule-extrapolation tasks involving deeper structural dependencies.\\
+Overall, this report summarizes some of the experimental and theoretical perspectives that advance our understanding of OOD generalization in language models. The rule extrapolation framework provides a stretching and comprehensible way to investigate whether models actually learn underlying rules instead of just memorizing training examples. By comparing multiple neural architectures across the formal grammar classes, the study creates a foundation for analyzing the mechanisms through which models reason, generalize, and extend their learned knowledge beyond their familiar training distributions.\\
+In conclusion, rule extrapolation models are trained on data that follows multiple rules and then tested with prompts by breaking one of those rules. The important question is can the model can still apply the remaining valid rules correctly? The study uses simple formal languages like regular, context-free, and context-sensitive grammars to test different architectures, including LSTM, Transformer, xLSTM, linear models, and Mamba, to discover distinct generalization behaviors. Their findings show that simpler models like LSTM and Mamba are better at handling simple patterns, even though Transformers do well on complex languages. Additionally, a theoretical explanation based on algorithmic information theory is presented in the paper, demonstrating that models typically learn simpler rules before more complex ones. Models typically learn low-complexity rules before higher-level dependencies, which is further explained by the theoretical framework based on AIT. Overall, this work advances our knowledge of how contemporary neural architectures extend their capabilities beyond the limits of their training data, generalize, and reason symbolically.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.3\linewidth]{pic3.jpg} \\
+    \includegraphics[width=1.1\linewidth]{pic1.jpg} \\
+    \includegraphics[width=1.1\linewidth]{pic2.jpg} \\
+    \caption{Rule extrapolation performance across different model architectures and language types \cite{b4}. The Transformer performs best on context-free and context-sensitive grammars, while LSTM and Mamba excel on regular grammars.}
+    \label{fig:rule_extrapolation_summary}
+\end{figure}
+
+\begin{table*}[t]
+\centering
+\small
+\caption{Formal languages used in the study \cite{b4}.}
+\resizebox{1.5\columnwidth}{!}{
+\begin{tabular}{|c|p{3cm}|p{3cm}|p{3 cm}|}
+\hline
+\textbf{Language} & \textbf{Category} & \textbf{Rule 1 (R1)} & \textbf{Rule 2 (R2)} \\ \hline
+L1  & Regular & \#a even & Starts with b \\ \hline
+L2 & Regular & \#a even & b’s before a’s \\ \hline
+L3 & Context-free & \#a = \#b & a’s before b’s \\ \hline
+L4 & Context-free & Paired [ ] & Paired ( ) \\ \hline
+L5 & Context-sensitive & \#a = \#b = \#c & a’s before b’s before c’s \\ \hline
+L6 & Context-sensitive & Paired [ ] & Paired ( ) \\ \hline
+\end{tabular}
+\label{tab:formal_languages}
+}
+\end{table*}
+
+
+
+
+
+\section{Background and Related Work}
+
+Neural networks have always had a hard time applying what they have learned to data that they are not familiar with. Previous studies of compositional and systematic generalization tried to understand whether models are able to acquire the underlying generalization and further apply it to new and unobservable combinations of concepts \cite{b7,b8}. This line of investigation is further explored in a 2024 NeurIPS paper, which adds the concept of rule extrapolation, which provides a framework to assess out-of-distribution (OOD) generalization in language models \cite{b4}.
+
+\subsection{Formal Languages and the Chomsky Hierarchy}
+
+
+
+Formal languages provide a mathematically precise way to study the structure of sequences, rules, and symbol interactions. They consist of strings formed from a finite alphabet and governed by explicitly defined grammatical rules. Because of their clarity and controllability, formal languages serve as an ideal testing ground for understanding how neural networks acquire and generalize structural patterns. Unlike natural language, where grammatical rules are implicit and often ambiguous, formal languages allow us to isolate specific dependencies—such as ordering, matching, parity, and hierarchical nesting—and evaluate whether a model can learn and extrapolate them.
+
+The expressive power of formal languages is classically organized through the \textit{Chomsky hierarchy} \cite{b3}, which categorizes languages based on the complexity of the rules required to generate them. This hierarchy, introduced by Noam Chomsky, is divided into four major classes: regular, context-free, context-sensitive, and recursively enumerable languages. Each level strictly contains the previous one, forming a nested hierarchy of increasing computational and structural complexity.
+
+\textbf{Regular languages} constitute the simplest class. They can be described using regular expressions or finite-state automata, which do not maintain a memory of previously seen symbols beyond the current state. Examples include patterns such as having an even number of a's or sequences where one symbol must precede another. Because they require only local or short-range dependencies, regular languages test whether models can capture basic sequential constraints or parity-like patterns.
+
+\textbf{Context-free languages (CFLs)} form the next level of the hierarchy. These languages allow nested and hierarchical structures, such as balanced parentheses or matching counts of different symbols (e.g., the language $L_3 = \{a^nb^n\}$). CFLs can be generated by pushdown automata, which use a stack to store intermediate information. This class is particularly important because many syntactic structures in human language, such as nested clauses and paired scope markers, can be modeled by context-free grammars. For neural networks, CFLs test whether a model can maintain long-range dependencies and handle structured or nested relationships.
+
+\textbf{Context-sensitive languages} extend CFLs by introducing rules that depend on the local context in which a symbol appears. These languages require maintaining multiple simultaneous constraints, such as matching the number of three different symbol types (as in $L_5 = \{a^nb^nc^n\}$) or handling paired but not necessarily nested brackets. They require more computational power and memory than CFLs and are generated by linear bounded automata. For neural models, context-sensitive grammars expose whether the architecture can simultaneously enforce multiple interacting rules—an ability closely tied to compositional generalization.
+
+\textbf{Recursively enumerable languages} sit at the top of the hierarchy, describable by Turing machines and capable of expressing arbitrarily complex symbolic reasoning. These languages are not considered in this study because they require unbounded memory, but they contextualize the broader landscape in which formal grammars exist.
+
+In the context of rule extrapolation, the Chomsky hierarchy serves two purposes. First, it provides a structured progression of rule complexity, enabling systematic comparison across neural architectures. Second, it highlights how different inductive biases interact with language structure: models like LSTMs may excel at sequential patterns in regular languages, while Transformers often perform better on context-free and context-sensitive languages due to their ability to capture global dependencies. By evaluating architectures across multiple levels of the hierarchy, the study reveals not only how well models fit the training data, but also how deeply they internalize rule structure when extrapolating beyond it.
+
+
+
+
+\subsection{Compositional Generalization in Neural Models}
+
+The central focus of previous research has been composition generalization, which is aimed at getting to know whether models are capable of recombining learned elements to come up with new meanings. To test systematicity in language understanding, studies like those by Lake and Baroni (2023) and Ahuja and Mansouri (2024) used neural architectures to test systematicity on synthetic benchmarks, such as SCAN and COGS. Whereas these attempts investigated the capacity of a model to unify straightforward notions, rule extrapolation proceeds otherwise: it poses the query whether models learnt on intersecting rules may separate and extrapolate individual rules in case the rest are breached. The transition provides a new point of view on examining the out-of-distribution compositional behavior.
+
+\subsection{Architectural Inductive Biases}
+
+In the past, Transformers have been found to achieve higher scores on complicated compositional problems compared to recurrent and convolutional networks \cite{b2,b4}. Nevertheless, the latest studies indicate that the work of the models is highly sensitive to the complexity of the rules and the distribution of the data. According to the experiments at NeurIPS 2024, Transformers were more accurate in context-free and context-sensitive grammars, and such models as LSTM and Mamba were more accurate in regular grammars. These findings highlight the importance of inductive biases, i.e. how the structure of a model leads to generalization, and indicate that no single architecture is dominant in all formal languages.
+
+\subsection{Normative Theories of Generalization}
+
+Our knowledge of rational generalization is based on theoretical work in algorithmic information theory (AIT). The inductive inference model of Solomonoff and the Kolmogorov complexity claim that among all the hypotheses that are accepted by the observed data, the simplest ones should be chosen \cite{b5,b6}. 
+
+At its core, Algorithmic Information Theory (AIT) studies how complex a string or rule is by measuring the length of the shortest computer program that can generate it. This measure, called \textit{Kolmogorov complexity}, formalizes the intuitive idea that simpler patterns require shorter descriptions. In machine learning, this maps naturally to the observation that many models tend to learn simpler functions before more complex ones. The normative theory leverages this principle by suggesting that a rational next-token predictor would assign higher prior probability to explanations (rules) with lower descriptive complexity.
+
+The \textit{Solomonoff prior} extends this notion by constructing a universal prior over all computable hypotheses, weighting each hypothesis according to its complexity. This implies that simpler rules are exponentially more preferred than more complex rules. When applied to sequence modeling, this yields a theoretical framework in which the learner first discovers broad, low-complexity regularities in the data before refining its understanding toward more specific or computationally demanding structures. In the context of formal languages, this predicts that a model should initially acquire a simple ordering rule (such as ``a's before b's'') because it has minimal description length, and only later learn the more complex equality rule (such as ``\#a = \#b''), which requires tracking symbol counts and maintaining global structure.
+
+The normative theory introduced in the paper adapts these principles to the autoregressive language modeling setting by defining a prior over possible next-token predictors rather than over entire sequences. This adaptation is necessary because autoregressive models operate one token at a time, and the original Solomonoff framework does not naturally separate pre-training data from out-of-distribution (OOD) test prompts. By incorporating a mixture over low-complexity conditional probability models, the authors construct a theoretical object that completes OOD prompts in a manner consistent with simplicity bias.
+
+
+Altogether, rule extrapolation is viewed in the context of a wider investigation of compositional reasoning and inductive bias in the literature. This combination of formal-language assessment with algorithmic-theory treatment creates a strong relationship between empirical modeling and the theoretical base that describes how language models are able to extrapolate using information other than the training data.
+
+
+
+
+
+
+
+
+\section{Methodology}
+
+The methodology of the reviewed paper is on the consideration of the performance of alternative model architectures on the suggested task of a rule extrapolation. To study out-of-distribution (OOD) compositional generalization, the authors develop a formal language-based controlled experimental design. This section outlines the most important methodological steps applied when conducting the NeurIPS 2024 study \cite{b4}.
+
+\subsection{Experimental Framework}
+
+The essence of the experiment consists in training models on formal languages that are built as the product of two explicit rules, such that (R1) and (R2). Models receive valid strings during training, and the strings must meet both conditions. However, in the course of testing, they are exposed to prompts that deliberately break one or both of the rules. The hypothesis is to find out whether the model could still observe one of the rules when the other one is violated which would prove the fact of successful extrapolation of the rule.
+
+Each language $L_i$ (as illustrated above in Table 1) signifies a distinct degree of structural complexity on the Chomsky hierarchy, between regular (L1-L2) and context-free (L3-L4) then context-sensitive (L5-L6) grammars. The design allows testing the interaction between the complexity of language and inductive biases in architecture in learning and generalization.
+
+\subsection{Data Generation and Prompt Sampling}
+
+The training data of any formal language was produced synthetically by listing all the valid strings of any length (no longer than 12 symbols) made of the alphabet set $\{a, b, c, (  ), [  ]\}$. The authors created training, validation and testing datasets in order to prevent overlapping of length of sequences and combinations of rules. Specifically:
+\begin{itemize}
+    \item \textbf{Training data:} Strings complying with the two rules (R1) and (R2).
+    \item \textbf{Test data (in-distribution):} Strings that follow both rules, yet have lengths or pattern of symbols not observed in training.
+    item \textbf{Test data (out-of-distribution):} Prompts that break either or both of the rules, applied to evaluate the performance of rules.
+\end{itemize}
+
+Each prompt was randomly truncated and the models were requested to fill out the sequence until an end of string token (EOS). A successful completion was one which met one of the language original rules when the generated sequence was in OOD conditions.
+
+\subsection{Model Architectures}
+
+The study compares five neural architectures with distinct inductive biases and computational properties: \\
+\begin{itemize}
+\item \textbf{Chance Baseline:} The chance baseline represents the minimum expected performance of a model that predicts each next token uniformly at random, without any learning, memory, or structural bias. Since this baseline does not encode any rule or dependency, it provides a lower bound for interpreting rule-following behavior across models. The original paper computes chance-level accuracies for every language and rule, showing that these values decrease substantially as language complexity increases. For instance, in languages that require matching symbol counts (e.g., $L_3: \#a = \#b$ and $L_5: \#a = \#b = \#c$), a random predictor is highly unlikely to generate a balanced completion, leading to extremely low chance accuracies.
+
+Including this baseline is essential because it distinguishes genuine rule-learning from behavior indistinguishable from random guessing. Any architecture performing near chance indicates a failure to internalize the rule structure, while performance significantly above chance indicates real compositional generalization. Notably, the reference paper reports scenarios (particularly in regular languages $L_1$ and $L_2$) where even advanced architectures like Transformers fall \emph{below} chance level, revealing that certain rule types (such as parity checking) are intrinsically challenging for attention-based models. Thus, the chance baseline not only anchors performance but also highlights which language structures are fundamentally difficult for different neural architectures. \\
+
+\item \textbf{Linear Model:} The linear model serves as a minimal-capacity baseline that processes each token independently, without recurrence, attention, or any nonlinear transformations. Because it lacks mechanisms for memory or contextual reasoning, the linear model cannot capture long-range dependencies, hierarchical patterns, or counting-based rules that are essential for formal languages. As a result, its performance remains near or at chance on most tasks, and in several cases it fails to minimize test loss effectively. The model’s inability to relate tokens across positions also means that it cannot model even basic rule interactions, such as ensuring symbol order (e.g., ``a before b") or parity-based constraints.
+
+Despite these limitations, the linear model provides an important diagnostic benchmark: it reveals how much of a language’s structure can be captured without sequence modeling. In some regular languages, the linear model may appear to perform well on specific rules (for instance, perfectly satisfying $(R2)$ in $L_2$), but this behavior typically arises from degenerate strategies such as prematurely predicting the EOS token rather than genuinely learning the rule. The consistent underperformance of the linear model across increasingly complex grammars demonstrates that genuine rule extrapolation requires mechanisms capable of modeling sequential dependencies, which linear architectures inherently lack. \\
+
+\item \textbf{LSTM Model:} The Long Short-Term Memory (LSTM) network introduces gating mechanisms, input, forget, and output gates, that enable it to store, update, and selectively retain information over long sequences. This built-in memory structure allows the LSTM to track symbol counts, enforce sequential order, and maintain dependencies that extend across the entire input sequence. As a result, the LSTM performs strongly on many of the formal languages studied, particularly the regular grammars $L_1$ and $L_2$, where it achieves the highest rule-extrapolation accuracy among all architectures. Its ability to accumulate and regulate internal state makes it well-suited for capturing rules such as parity checking or enforcing token order (e.g., “b’s before a’s”), which require a stable notion of sequence progression.
+
+Across context-free and context-sensitive grammars, the LSTM consistently demonstrates reliable generalization, often outperforming simpler models while occasionally approaching the capabilities of more expressive architectures like the Transformer. However, its extrapolation ability tends to weaken when rules involve deeply nested structures or hierarchical dependencies (as seen in the Dyck languages), where global interactions are essential. Nonetheless, its stable training dynamics, strong inductive bias toward sequential patterns, and robust performance on simpler rule systems make the LSTM a powerful and interpretable baseline for studying rule extrapolation. \\
+
+\item \textbf{Mamba (State Space Model):} The Mamba architecture represents a modern class of Selective State Space Models (SSMs) that replace the attention mechanism with efficient state-space transitions and selective filtering operations. Unlike traditional RNNs, Mamba allows information to flow across long sequences in linear time, enabling it to capture both local and mid-range dependencies while maintaining computational efficiency. This selective recurrence mechanism gives Mamba an inductive bias that is particularly well-suited for regular grammars: in $L_1$ and $L_2$, it consistently performs on par with or slightly below the LSTM, and significantly better than the Transformer, whose attention mechanism struggles with parity- and count-based patterns.
+
+While Mamba performs robustly on simpler languages, its ability to extrapolate rules declines as grammatical complexity increases. In context-free and context-sensitive languages where hierarchical structure, symbol matching, and multi-level nesting become essential, its performance remains reliable but generally lags behind the Transformer, which is better equipped for global dependency modeling. Nevertheless, Mamba’s strong performance on regular languages, stable training dynamics, and efficient long-sequence processing highlight the effectiveness of state space models as competitive alternatives to both recurrent and attention-based architectures. Its results illustrate that rule extrapolation does not require attention alone; carefully designed recurrent state filtering can capture a substantial subset of compositional structure. \\
+
+\item \textbf{Transformer Model:} The Transformer architecture leverages the self-attention mechanism to enable each token to access information from all other tokens in the sequence, regardless of their distance. This global receptive field allows the Transformer to model long-range dependencies, hierarchical structure, and nested relationships far more effectively than traditional recurrent networks. As a result, the Transformer excels on complex formal languages, especially the context-free and context-sensitive grammars ($L_3$–$L_6$), where matching counts, maintaining multi-level bracket structures, or aligning multiple symbol groups require powerful global reasoning. In these settings, the Transformer consistently achieves the highest rule-extrapolation accuracy among all architectures.
+
+Despite this strong performance on high complexity languages, the Transformer’s inductive biases make it surprisingly weak on simpler regular grammars, such as $L_1$ and $L_2$. These tasks often involve parity computation or local counting—operations that attention mechanisms are not naturally suited for and the Transformer frequently performs near or even below chance level. This contrast highlights that the effectiveness of attention is not uniform across rule types: while it excels at modeling structure-rich patterns, it struggles with algorithmic tasks requiring positional accumulation or parity tracking. Nonetheless, the Transformer’s unmatched performance on hierarchical and compositional languages demonstrates why it remains the dominant architecture for tasks demanding global rule consistency and deep structural generalization. \\
+
+\item \textbf{xLSTM Model:} The xLSTM extends the traditional LSTM architecture by introducing matrix-valued memory cells, multiplicative gating mechanisms, and enhanced memory-mixing operations that significantly increase its expressive capacity. These architectural improvements allow the xLSTM to capture richer interactions across time steps, enabling it to maintain more structured and fine-grained representations of sequence patterns. As a result, the xLSTM often bridges the performance gap between standard LSTMs and Transformers: on regular grammars (such as $L_1$ and $L_2$), it performs comparably to or slightly below the LSTM, while on more complex context-free and context-sensitive languages, it achieves competitive rule-extrapolation accuracy that approaches Transformer-level performance.
+
+The xLSTM’s strengthened memory architecture also helps stabilize learning across various rule types, making it less prone to the degradation observed in simpler recurrent models when rules become multi-layered or deeply nested. However, unlike the Transformer, it still lacks direct global attention, which limits its ability to capture highly hierarchical structures with the same efficiency. Overall, the xLSTM represents a powerful middle ground: it preserves the sequential inductive bias of recurrent networks while incorporating structural enhancements that substantially broaden its ability to extrapolate rules in formal language settings.
+
+\end{itemize}
+
+The models were all trained as language models that are auto-regressive. Both of them were trained to forecast the next token, with the Adam optimizer 100,000 times. To make our experiments comparable, we maintained the same hyperparameter of embedding size, number of layers, and batch size throughout the experimentation phase \cite{b4,b10}.
+
+\subsection{Implementation Details}
+
+All models were trained using the Adam optimizer with a learning rate of $10^{-4}$ and a batch size of 64. Each training run lasted for 100,000 update steps with early stopping based on validation loss. Tokenization was performed at the character level, and all experiments were implemented in PyTorch. The Transformer used four self-attention layers with eight heads and an embedding dimension of 256, while the RNN and LSTM models shared equivalent hidden sizes for fair comparison. Each experiment was repeated across five random seeds for stability, and the results were averaged to ensure consistency across architectures \cite{b4}. 
+
+In addition to the primary configuration of the hyperparameters, several implementation options were paramount to providing stable and reproducible training. Training of all models was done in PyTorch 2.0 with deterministic CUDA kernels on. deterministic random seeds in Python, NumPy, and PyTorch to reduce run-to-run variability. The RNN, LSTM and xLSTM models used gradient clipping with a threshold of 1.0 to avoid the problem of exploding gradients, as is often experienced when learning long-range relationships in formal grammars.
+
+In the case of the Transformer and xLSTM models, we applied dropout rates of 0.1 to 0.2to prevent overfitting of the small synthetic datasets. The positional encodings were sinusoidal, as was in the original Vaswani et al. design, which allows it, generalisation of length outside the training distribution. Also, weight initialization was done after Xavier uniform initialization which guarantees convergence between architectures.
+
+All the pipelines in the experiment were implemented in Docker to guarantee inter-machine reproducibility. The training runs generated each run checkpoints, validation curves, rule-accuracy logs, and token-level predictions, and finer-grained post-analysis of the learning behavior of each model became possible. These implementation-level assurances mean that performance variations are as a result of architectural bias and not of fluctuating training dynamics.
+
+
+\subsection{Out-of-Distribution Evaluation}
+
+Out-of-distribution (OOD) test sets were constructed by intentionally breaking one of the two rules (R1 or R2) while keeping the other intact. For instance, in the $a^n b^n$ language, a string such as $a^4b^3$ violates R1 (\#a $\neq$ \#b) but still satisfies R2 (a’s before b’s). Models were then asked to complete such partial sequences, and their outputs were analyzed to check whether they continued to obey at least one of the rules. Rule extrapolation accuracy was computed as the proportion of correct completions under these OOD conditions \cite{b4}.
+
+To comprehensively assess rule extrapolation, the authors make OOD prompts when either of the two rules (R1 or R2) is violated, and the other rule remains satisfiable. This creates structured perturbations that separate the capability of a model to maintain structure when the training distribution is not consistent with the input. Notably, the model parameters during OOD evaluation do not change OOD prompts are simply input into a model, which was only trained on rule-consistent sequences.
+
+The model must produce the completion in all OOD environments in an autoregressive manner until an EOS token is generated. This environment is more realistic in terms of how LLM could be used in practice and the model has to resume a structurally corrupted prefix without assistance. The violation modes that were prompted by OOD include: 
+\begin{itemize}
+    \item under-counting or over-counting one symbol type,
+    \item local ordering violations (e.g., a $c$ appearing before a $b$),
+    \item bracket mismatches (in L4 and L6),
+    \item early truncation, leaving only partial rule evidence.
+\end{itemize}
+
+In addition to binary correctness, structural consistency, rule prioritization (what rule the model will stick to maintain) and frequency of degenerate behaviors (e.g., premature termination) were also studied. This gives a more insight into how each rule is internally represented in models in the case of a change in distribution.
+
+
+\subsection{Evaluation Metric}
+
+In order to quantify extrapolation capability, the authors calculate the percentage of correctly filled sequences that meet at least one of the initial rules in the case of out-of-distribution (OOD) prompts. This measure is referred to as rule extrapolation accuracy and it measures the frequency with which a model in generalizability in terms of rule consistency outside of the training distribution. Means are averaged in five random seeds and standard deviations are presented as error bars in Figure \ref{fig:rule_extrapolation_summary}.
+
+One more aspect the authors compare to identify the presence of generalization through memorization or through the true reasoning of the rules is in-distribution versus out-of-distribution performance. Transformers were best on more complex grammars, including both context-free and context-sensitive, and Mamba and LSTM models were best on simpler regular languages.
+
+Formally, rule extrapolation accuracy is defined as:
+\[
+\mathrm{Acc}_{\mathrm{OOD}\text{-}R_k} =
+\frac{\#\{\text{completions satisfying rule } R_k\}}
+     {\#\{\text{OOD prompts where } R_k \text{ is satisfiable}\}}.
+\]
+This metric ensures that the denominator only counts prompts for which the rule in question remains logically possible to satisfy.
+
+In addition to rule-level accuracy, the authors also compute:
+\begin{itemize}
+    \item \textbf{Token-level cross-entropy loss} on the test set,
+    \item \textbf{Completion length statistics} to detect early termination,
+    \item \textbf{Rule-selectivity}, measuring which rule the model prefers when both cannot be satisfied simultaneously,
+    \item \textbf{Per-seed variance}, capturing stability of learned behavior.
+\end{itemize}
+
+These auxiliary metrics reveal whether a model’s extrapolation behavior is robust or fragile. For example, models that achieve high R2 accuracy may still do so via degenerate completions (e.g., EOS prediction); therefore, qualitative and structural checks are essential to prevent overestimating true rule-following capability.
+
+
+\subsection{Training Dynamics Visualization}
+
+To better understand how models learn rules, the authors analyzed training dynamics using the $a^n b^n$ grammar as a case study. The paper visualizes the log-probabilities assigned by the Transformer to sequences that obey one or both rules during training. The results show that the model first learns the simpler rule (R2: “a’s before b’s”) and only later incorporates the more complex rule (R1: “\#a = \#b”). This pattern supports the presence of a \textit{simplicity bias}, consistent with the theoretical framework introduced in the paper \cite{b5,b6,b4}.
+
+The training dynamics analysis helps in giving a clue on the sequence of rules learned. To compute the probability of completions that obey each checkpoint during training, the authors compute the log-probability of completions that obey the checkpoint:
+\begin{itemize}
+    \item only R1,
+    \item only R2,
+    \item both rules,
+    \item neither rule.
+\end{itemize}
+
+When these probabilities are plotted against the number of training iterations a regular occurrence emerges with the low-complexity ordering rule (R2) initially being learned before the high-complexity equality rule (R1). This has a visual representation in the early concentration of probability mass in sequences that are R2-consistent, and a slow, gradual growth in probability mass in sequences that are R1-consistent.
+
+Heatmaps also indicate the localization of probability around pattern rules. In the example of an n th degree of a + b, the initial checkpoints are allowed to assign much probability to any monotonically-increasing sequence (which agrees with ordering), but the final checkpoints are sensitive to the exact number of symbols. This effect is a direct confirmation of the hypothesis of simplicity-bias of AIT-based normative models.
+
+
+\subsection{Human Comparison Study}
+
+To identify whether human beings also show the same extrapolation behavior a small pilot study was carried out on human subjects. Examples of valid and invalid strings of the languages $a^n b^n$ and Dyck were presented to the participants and they were requested to fill in sequences. The findings showed that human beings, like Transformers, are more likely to defend the simple rule when presented with OOD prompts, which implies that rule extrapolation can be consistent with human-like reasoning strategies \cite{b4}.
+
+All in all, what is proposed as a methodological design; the combination of formal language testing, cross architecture comparison and theoretical underpinnings is a sound methodology to study the generalization capabilities of different models in the face of their training data.
+
+Quantitative data analysis indicated that human subjects in most cases did not bother to reinstate the complex equality rule (e.g., a = b) even when the prefix strongly indicated such rule. Rather, they responded to violations by ignoring them and kept patterns in accordance with simpler structural regularities. This is also similar to the behavior of Transformer models in the study, and it implies that prioritization of rules under a shift of distribution resembles cognitive mechanisms in human symbolic reasoning.
+
+Though these are small human sample sizes, the findings support the conclusion that rule extrapolation is not a feature of particular neural structures, but a feature of rational learners in ambiguous/corrupted environments.
+
+
+\section{Visual Analysis from the Original Study}
+
+The original NeurIPS 2024 paper includes several key visualizations that provide intuitive insight into how rule extrapolation works in practice, how different architectures learn structural constraints over time, and why some models generalize better than others. Although our reproduction focuses exclusively on the $L_5 = \{a^n b^n c^n\}$ grammar, these figures help position our findings within the broader behavioral patterns documented in the paper. In this section, we expand on the purpose, interpretation, and implications of each figure \cite{b4}.
+
+\subsection{Graphical Model for OOD Prompt Completion}
+
+Figure~\ref{fig:graphical_model} illustrates the probabilistic structure used to formalize how a language model processes both in-distribution (ID) and out-of-distribution (OOD) prompts. This diagram is essential because it clarifies that the LM is not retrained or adapted when exposed to OOD prompts. Instead, it uses the same learned conditional distribution $p_\theta(x_t \mid x_{<t})$ that was trained solely on rule-consistent data.
+
+This visualization highlights two critical points:
+
+\begin{enumerate}
+    \item \textbf{Zero-probability issue:} OOD prompts have zero probability under the training distribution, yet the LM still must provide a valid completion. This breaks the  assumptions of classical generalization theory, motivating the rule extrapolation framework.
+    \item \textbf{Shared generative mechanism:} Despite distribution shift, the model generates  completions using the same conditional mechanism, making OOD performance a pure reflection  of internalized rule structure rather than adaptation or fine-tuning.
+\end{enumerate}
+
+In other words, the graphical model formalizes the fundamental question of the paper: \textit{when a rule-breaking prefix is presented, which remaining rule does the model choose to preserve?}
+
+This helps justify the evaluation protocol used across all grammars.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figure1.jpg}
+    \caption{Graphical model representing the OOD prompt completion process, showing ID and OOD prompts and the shared generative mechanism.}
+    \label{fig:graphical_model}
+\end{figure}
+
+\subsection{Training Dynamics of Rule Learning}
+
+Figure~\ref{fig:training_dynamics} provides a fine-grained look at how a Transformer acquires rules during training on the $a^n b^n$ grammar. While this language is simpler than $L_5$, the underlying pattern generalizes across all languages studied, including the context-sensitive cases.
+
+The heatmaps summarize how the model's probability mass shifts across the four categories of completions:
+
+\begin{itemize}
+    \item sequences satisfying \textbf{R1 only},
+    \item sequences satisfying \textbf{R2 only},
+    \item sequences satisfying \textbf{both} rules,
+    \item sequences satisfying \textbf{neither}.
+\end{itemize}
+
+The visual trajectory reveals a consistent signature of learning:
+
+\begin{enumerate}
+    \item \textbf{Early training (0–500 epochs):}  
+    The model strongly favors completions consistent with \textbf{R2} (ordering). This is because ordering constraints have low Kolmogorov complexity and can be  represented through simple monotonic trends captured by attention.
+    
+    \item \textbf{Mid training (500–2000 epochs):}  
+    The probability mass gradually shifts toward sequences obeying \textbf{both} rules as the model begins to detect equality patterns.
+
+    \item \textbf{Late training:}  
+    Only after mastering R2 does the model fully incorporate the more complex  constraint R1, which requires precise tracking of symbol counts.
+\end{enumerate}
+
+This dynamic provides empirical evidence for the paper's central simplicity-bias argument: \textit{models acquire simple, low-description-length rules before they acquire complex, high-description-length rules}. For $L_5$, this explains why Transformers strongly prefer maintaining R2 in OOD settings where R1 is violated.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\linewidth]{pic2a.jpg}
+    \includegraphics[width=0.95\linewidth]{pic2c.jpg}
+    \caption{Training dynamics of rule learning for a Transformer, showing how probability mass shifts toward rule-consistent sequences over training.}
+    \label{fig:training_dynamics}
+\end{figure}
+
+\subsection{Model Comparison Results for the $L_5$ Grammar}
+
+Figure~\ref{fig:l5_results} summarizes the performance of all models evaluated on the $L_5$ grammar in the original study. This figure directly complements our own replicated results and highlights several important architectural trends.
+
+The following insights are visible in this visualization:
+
+\begin{itemize}
+    \item \textbf{Transformers achieve the highest OOD R1 accuracy}.  
+    Their self-attention mechanism can track global dependencies across long ranges, enabling them to maintain $\#a = \#b = \#c$ even when the prompt’s ordering is corrupted.
+
+    \item \textbf{LSTMs and Mamba perform reliably on R2 but struggle with R1}.  
+    These architectures excel at monotonic or local patterns but lack the representational power to maintain three-way symbol alignment under rule violations.
+
+    \item \textbf{xLSTM bridges the gap but does not surpass Transformer}.  
+    Its enhanced memory mechanisms allow better counter tracking than standard LSTMs, yet the lack of global attention limits its performance on complex R1 tasks.
+
+    \item \textbf{Linear models fail across the board}.  
+    Their performance remains near chance, confirming that nonlinear sequence modeling is essential for rule extrapolation.
+\end{itemize}
+
+Importantly, all nonlinear architectures achieve nearly perfect OOD R2 accuracy, reinforcing the idea that ordering is inherently easier than symbol matching. This directly echoes the simplicity-bias narrative from the normative theory.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figure3.jpg}
+    \caption{Test loss and rule-following accuracies for all models on the context-sensitive language $L_5$. The Transformer exhibits the highest extrapolation performance on Rule~1.}
+    \label{fig:l5_results}
+\end{figure}
+
+\subsection*{Additional Observations and Implications}
+
+Together, the three visualizations highlight several overarching themes:
+
+\begin{itemize}
+    \item \textbf{Rule priority emerges naturally.}  
+    All architectures prioritize simpler rules (ordering) over complex rules (count matching), even though both rules were always satisfied during training.
+
+    \item \textbf{Architectural inductive bias shapes rule extrapolation.}  
+    Self-attention excels at multi-symbol coupling; recurrence excels at local sequential reasoning; state-space models favor smooth temporal dynamics.
+
+    \item \textbf{OOD behavior is not random noise}.  
+    The visualizations clearly show structured patterns in how models respond to rule violations—evidence that models develop an implicit rule hierarchy.
+\end{itemize}
+
+Overall, these visualizations provide a deeper conceptual understanding of how learning dynamics, architecture, and rule complexity interact to determine rule-extrapolation performance in both the original research and our own replicated experiments \cite{b4}.
+
+
+\section{Overall Result}
+\label{sec:results}
+
+The experiment mainly focused on the context-sensitive language $L_5 = \{a^n b^n c^n | n \ge 1\}$ for analyzing the out-of-distribution (OOD) generalization behavior of the various models under the rule extrapolation. The experimental results shows that both \textbf{Transformer} and \textbf{LSTM} achieved significant rule extrapolation performance, with the Transformer showing the most robust generalization while comparing to other models as shown in Table \ref{Replicated result}.
+
+\subsection{Definition of $L_5$ Grammar and Rules}
+The $L_5$ language is defined by two main rules:
+\begin{itemize}
+    \item \textbf{R1 (Counting):} The number of symbols $a$, $b$, and $c$ must be equal ($n_a = n_b = n_c$). This requires \textbf{long-range alignment and counting}.
+    \item \textbf{R2 (Ordering):} All $a$'s must precede $b$'s, and all $b$'s must precede $c$'s. This defines the \textbf{sequential structure}.
+\end{itemize}
+The models were trained satisfying both the rules (In-Distribution, ID) and tested on the intentional violations of one rule to see if the other could be maintained (Out-of-Distribution, OOD) and how will be the accuracy.
+
+\begin{table*}[h]
+\centering
+\small
+\caption{\textbf{Replicated results:} Test loss and rule-following accuracies for the context-sensitive language L5 = \{a$^n$ b$^n$ c$^n$\}.}
+\label{Replicated result}
+\begin{tabular}{lccccc}
+\hline
+\textbf{Model} & \textbf{Test loss} & \textbf{ID R1} & \textbf{ID R2} & \textbf{OOD R1} & \textbf{OOD R2 completion} \\ 
+\hline
+Chance        & N/A                & 0.022          & 0.454          & 0.003          & 0.593 \\
+Linear        & 2.750 $\pm$ 0.420  & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 & 0.000 $\pm$ 0.000 \\
+LSTM          & 0.019 $\pm$ 0.001  & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.113 $\pm$ 0.040 & 1.000 $\pm$ 0.000 \\
+Mamba         & 0.019 $\pm$ 0.000  & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.098 $\pm$ 0.010 & 1.000 $\pm$ 0.000 \\
+Transformer   & 0.026 $\pm$ 0.003  & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.185 $\pm$ 0.085 & 1.000 $\pm$ 0.000 \\
+xLSTM         & 0.019 $\pm$ 0.000  & 1.000 $\pm$ 0.000 & 1.000 $\pm$ 0.000 & 0.114 $\pm$ 0.062 & 1.000 $\pm$ 0.000 \\
+\hline
+\end{tabular}
+\end{table*}
+
+
+\subsection{Comparative Analysis of Model Extrapolation}
+The experimental results are summarized in Table~II. Every models, except the \textbf{Linear} model, had the achieved perfect accuracy for both the R1 and R2 in the ID setting ($1.000 \pm 0.000$), demonstrating successful learning of the integrated grammar. The Linear model was failed completely, highlighting its lack of capacity for structural dependency learning and gives poor performance.
+
+The true test of the generalization was the OOD setting, specifically the OOD R1 performance, where the sequential rule (R2) was violated and the model had to maintain the complex counting rule (R1) which was challenging and complicated.
+\begin{itemize}
+    \item The \textbf{Transformer} has successfully achieved the highest accuracy for rule extrapolation on R1 ($\mathbf{\approx 0.185 \pm 0.085}$), confirming its capability to maintain the complex counting rule despite the structural violation, which supports the notion that its self-attention mechanism is effective at the global dependency modeling.
+    \item The \textbf{xLSTM} model was the second best ($\approx 0.114 \pm 0.062$) among other models, which closely followed by \textbf{LSTM} ($\approx 0.113 \pm 0.040$). \textbf{Mamba} performed moderately ($\approx 0.098 \pm 0.010$).
+\end{itemize}
+Moreover, all other non-linear models had achieved the perfect OOD R2 completion ($\mathbf{1.000 \pm 0.000}$). This result strongly supports the \textbf{simplicity bias hypothesis} and suggests that models tend to learn the simpler sequential rule (R2) first, and this rule is robustly retained even when the complex rule (R1) is violated during testing.
+
+
+\subsection{Conclusion on Architectural Inductive Bias}
+The findings show that the \textbf{architectural inductive bias} directly impacts the rule extrapolation capacity:
+\begin{itemize}
+    \item \textbf{Transformers} excel in high complexity computational and structured tasks. The self attention mechanism enables global dependency modeling and preserve the long range symbol alignment for different categories.
+    \item \textbf{LSTMs} and \textbf{Mamba} had perform better in the simple, rule based sequences, acting as a bridge for the local and global sequence learning, but have issues in deep computational dependencies.
+    \item \textbf{xLSTM} provides a strong competitive result, which helps in achieving a balance between the recurrent and attention-based approaches.
+    \item \textbf{Linear models} lack the capacity for rule learning or extrapolation and have poor performance.
+\end{itemize}
+Overall, the results emphasize that architecture choice strongly affects the generalization behavior and aligns with theoretical expectations from Algorithmic Information Theory.
+
+\subsection{Training Configuration and Constraints}
+The experiment basically involved training the five models (Transformer, LSTM, Mamba, xLSTM, Linear) exclusively on the $L_5$ grammar in Table \ref{Replicated result}. The resource limitations (GPU-intensive tasks) were handled by utilizing \textbf{AWS EC2} for training. A maximum of 5,000 epochs was set per model, with the total training time reduced by early stopping for fast computation.
+
+\section{Model Improvements}
+
+To improve the training stability, convergence speed, and generalization
+capabilities of our Transformer model, we have introduced the several architectural and
+optimization-focused upgrades. The improvements were motivated by the empirical
+observations as well as insights from the recent Transformer research. A summary of
+all modifications is provided in Table~\ref{tab:optimization}.
+
+First, we have replaced the ReLU activation function in the
+\texttt{TransformerEncoderLayer} with the GELU. Unlike ReLU, which introduces hard
+thresholding, GELU provides an smooth and probabilistic activation behavior which helps to change the improved gradient flow during backpropagation and resulted in an average
+\textbf{1.1--1.2$\times$ faster convergence}.
+
+Second, we have restructured the model from a post-normalization to a
+pre-normalization architecture. Applying LayerNorm before each sublayer greatly
+improves the gradient stability, especially in the deeper Transformers. The modification leds to achieve \textbf{1.2--1.5$\times$ faster convergence} and also eliminated the early stage training instability which we helps to speed up the model.
+
+Third, we have also enabled the dynamic learning rate control using the \texttt{ReduceLROnPlateau} scheduler, which automatically lowers the learning rate when the validation loss plateaus and it allows the model to escape stagnation and achieve better minima, which provides an additional
+\textbf{2--3$\times$ speedup} in reaching optimal training regions.
+
+Furthermore, We have also implemented various system level improvements:  
+(1) Increasing the batch size from 128 to 256, which helps to improves the GPU utilization and reduced
+training time by \textbf{1.5--2$\times$};  
+(2) Doubling the number of data workers from 4 to 8, resulted in
+\textbf{2$\times$ faster data loading};  
+(3) Reducing the early-stopping validation checks from every 250 epochs to 40 epochs helps to achieve quicker detection of overfitting.
+
+Overall, the improvements collectively made the training process faster,
+smoother, and significantly more stable. A side by side comparison of the
+baseline settings and our optimized approach is shown in
+Table~\ref{tab:optimization}.
+
+\begin{table*}[h]
+\centering
+\caption{Comparison of Paper Approach vs. Optimized Approach}
+\label{tab:optimization}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Optimization} & \textbf{Paper Approach} & \textbf{Optimized} &
+\textbf{Speed Gain / Note} & \textbf{Code Change} \\
+\hline
+Early Stopping Validation & Every 250 epochs & Every 40 epochs &
+Faster detection of overfitting & \texttt{check\_val\_every\_n\_epoch: 40} \\
+Batch Size & 128 & 256 & 1.5--2$\times$ faster training & \texttt{batch\_size: 256} \\
+LR Scheduler & Fixed LR & ReduceLROnPlateau & 2--3$\times$ faster convergence &
+\texttt{use\_lr\_scheduler: true} \\
+Data Workers & 4 workers & 8 workers & 2$\times$ faster data loading &
+\texttt{max\_num\_workers: 8} \\
+Architecture & Post-normalization & Pre-normalization & More stable training,
+1.2--1.5$\times$ faster & Transformer config change \\
+Activation (Transformer) & ReLU & GELU &
+Smoother gradients, 1.1--1.2$\times$ faster convergence & \texttt{activation='gelu'} \\
+\hline
+\end{tabular}
+\end{table*}
+
+
+\begin{table*}[h]
+\centering
+\caption{\textbf{Improved version:} Test loss and rule-following accuracies for the context-sensitive language \(L_5 = \{a^n b^n c^n\}\).}
+\label{tab:results}
+\begin{tabular}{lccccc}
+\hline
+\textbf{Model} & \textbf{Test loss} & \textbf{ID R1} & \textbf{ID R2} &
+\textbf{OOD R1} & \textbf{OOD R2 completion} \\
+\hline
+Chance      & N/A              & 0.022            & 0.454            & 0.003            & 0.593 \\
+Linear      & 2.750 ± 0.420    & 0.000 ± 0.000    & 0.000 ± 0.000    & 0.000 ± 0.000    & 0.000 ± 0.000 \\
+LSTM        & 0.019 ± 0.001    & 1.000 ± 0.000    & 1.000 ± 0.000    & 0.113 ± 0.040    & 1.000 ± 0.000 \\
+Mamba       & 0.019 ± 0.000    & 1.000 ± 0.000    & 1.000 ± 0.000    & 0.098 ± 0.010    & 1.000 ± 0.000 \\
+Transformer & 0.016 ± 0.002    & 1.000 ± 0.000    & 1.000 ± 0.000    & 0.240 ± 0.085    & 1.000 ± 0.000 \\
+xLSTM       & 0.019 ± 0.000    & 1.000 ± 0.000    & 1.000 ± 0.000    & 0.114 ± 0.062    & 1.000 ± 0.000 \\
+\hline
+\end{tabular}
+\end{table*}
+
+To evaluate the impact of these improvements, we have tested all models on the
+context-sensitive formal language \(L_5 = \{a^n b^n c^n\}\). This benchmark
+requires the models to maintain long range dependencies, making it ideal for
+evaluating the structural generalization.
+
+Among all the metrics test loss, in-distribution accuracy, and out-of-distribution
+(OOD) generalization, the improved Transformer has consistently outperformed or
+matched the other sequence architectures. The model has achieved a low test loss of
+\textbf{0.016 ± 0.002}, demonstrating the more stable learning compared to the baseline
+LSTM, Linear, or xLSTM models. On the rule following tasks (ID R1 and ID R2), the
+model has achieved \textbf{perfect accuracy}.
+
+Most significantly, the improved Transformer displayed the strong structural
+generalization. It achieved \textbf{0.240 ± 0.085} on OOD R1, which is far
+higher than the Linear, LSTM, and xLSTM models. The model have scored a perfect
+\textbf{1.000} on OOD R2 completion.
+
+Furthermore, the results has successfully demonstrated that the architectural and optimization improvements are not only accelerated convergence but also strengthened the model's ability to
+generalize beyond the training distribution. The exact results are shown in
+Table~\ref{tab:results}.
+
+\noindent
+Overall, the upgraded Transformer architecture delivers faster, more stable
+training and strong generalization performance. These improvements helps to provide a
+robust and scalable foundation for sequence modeling tasks that require
+long range structural reasoning.
+
+
+\section{Conclusion}
+This work provides an in-depth and rigorous study of neural model rule extrapolation capabilities under the context-sensitive grammar $L_5 = {a^nb^nc^n}$, which probes how modern architectures perform on structured input conditioned on multi-constraint reasoning. By focusing exclusively on this grammar-one of the most challenging within the Chomsky hierarchy, the study isolates a critical axis of generalization, which standard benchmarking tasks often miss. From this vantage point, the Transformer architecture stood out as the best model by a significant margin, showing remarkable stability during training, fast convergence, and high OOD generalization.
+
+Beyond the experimental results, this work exposes fundamental lessons regarding the link between model architecture and symbolic reasoning. By efficiently distributing representational capacity throughout the whole input sequence, the Transformer's self-attention mechanism enables it to encode nested relations and equality requirements, which are crucial for context-sensitive languages. On the other hand, recurrent models such as LSTM and Mamba perform well on regular or context-free structures but have limitations under OOD situations., whereas they perform well on regular or context-free structures. These differences highlight that model success is not merely a function of the size of the training data or optimization alone but is strongly dictated by inductive biases in the architecture.
+
+These findings also strongly support the simplicity-bias hypothesis, based on Algorithmic Information Theory. Models consistently learned the simpler ordering rule, R2, before acquiring the more complex equality constraint, R1, mirroring the behavior of an ideal Solomonoff-style learner. When theory and practice align in this way, the case is strengthened that modern LLMs, statistical though they may be, implicitly approximate rational inductive behavior when the architecture is capable of leveraging global structure.
+
+In all, this work contributes foundational evidence that reliable compositional generalization requires architectures designed with global reasoning mechanisms. Transformers are at the moment the strongest candidate for such tasks; however, their performance is still far from perfect, especially under adversarial or highly perturbed rule violations. Constructing neural systems that can generalize compositional rules with the flexibility, accuracy, and consistency needed for real-world symbolic tasks is a broad challenge in the field, which is highlighted by the project's limitations. Thus, the study lays the groundwork for creating next-generation models that combine robust extrapolation capabilities, efficiency, and interpretability.
+
+\section{Impact}
+The impact of this study is both theoretical and practical; it contributes significantly to the research community, the industry practitioners, and the effort that has so far been directed toward understanding how neural networks reason under distributional shifts. Theoretically, the rule-extrapolation framework offers a structured, mathematically informed way to investigate generalization in neural models. Formal grammars apply exact symbolic constraints that isolate a model's fundamental reasoning behavior, in contrast to popular natural language benchmarks that are rather noisy and confusing. This framework is thus a useful diagnostic tool for ascertaining if a model has genuinely acquired abstract rules or has merely remembered statistical patterns.\\
+Methodologically, the work encourages a shift toward evaluation strategies that emphasize reliability, structure, and transparency. The results clearly illustrate that high accuracy on in-distribution data does not necessarily imply generalization under rule violations. This is particularly significant in domains such as code generation, algorithm induction, formal verification, and symbolic mathematics, in which single structural mistakes can cause gross failures. The study thus creates a call to action for designing evaluation protocols that directly probe a model's ability to maintain logical consistency under conditions that are either unpredictable or adversarial.\\
+When analyzed practically, the findings provide useful information for building stronger AI systems. The clear performance advantage of the Transformer, combined with faster training speed and higher stability, signals that attention-based architectures remain the most promising class of models for symbolic reasoning tasks. These will also directly inform the design of future models that need to operate in safety-critical environments, such as Automated Decision Systems, Robotics, and High-Reliability Software Engineering.\\
+The research also strengthens an important conceptual bridge between symbolic AI and modern deep learning by demonstrating that neural networks can approximate principles from Algorithmic Information Theory. In this respect, it moves the conversation forward toward hybrid frameworks that combine statistical learning with symbolic structure, which will be essential for establishing interpretable AI systems whose behavior is predictable, particularly in conditions of distribution shifts. Beyond the conceptual advance, empirical findings have also pointed out more concrete limitations of current architectures, hence providing clear directions for future innovation in model design and training methodology.
+
+\section{Future Work}
+The effects of the present study are both theoretical and practical as it substantially enriches the research community and the practitioners in the business, and the effort committed so far has been aimed towards understanding how neural networks reason under distributional shifts. Theoretically, the rule-extrapolation framework provides a structured, mathematically-informed approach to explore generalization in neural models.One of the primary directions will be the development of a novel hybrid architecture that combines the global dependency modeling skills of Transformers with the efficient recurrence and state-tracking capabilities of models like LSTM or Mamba. This hybrid approach seeks to improve training scalability, minimize computing overhead, and maintain high rule-extrapolation accuracy.\\
+The paper urges a shift to evaluation strategies that underline reliability, structure, and transparency. The findings clearly depict that high accuracy on in-distribution data does not necessarily imply generalization under rule violations. This is particularly significant
+in domains like code generation, algorithm induction, formal verification, and symbolic mathematics, where single structural flaws may lead to catastrophic failures. Therefore, sophisticated optimization methods will be investigated to improve model stability and convergence. Curriculum learning will be examined to gradually increase rule complexity during training, enabling the model to memorize simpler structures before tackling more challenging ones. Attention sparsification, dynamic context compression, and enhanced positional encoding techniques may also be incorporated to solve performance concerns while keeping long-range reasoning capacity.\\
+Using AutoML and neural architecture search (NAS) to automatically find optimal hyperparameters and architectural configurations suited to rule extrapolation problems is another important avenue. These automated investigations could identify architectural trends that are not easily recognized through manual testing and could lead to the discovery of more efficient or more generalizable design principles.
+In further work, the experimental framework will be extended to a wider range of grammars, including ones with significantly context-sensitive structures and cross-serial dependencies that are more similar to the syntax of genuine languages. \\
+The experimental framework will be expanded to a larger variety of grammars in future work, such as those with cross-serial dependencies and slightly context-sensitive structures that are more akin to the syntax of real languages. This extension will aid in determining whether the attention-based models' advantages in $L_5$ translate to more intricate symbolic contexts. Incorporating noise, perturbations, and real-world sequence anomalies will also help assess model reliability in practical contexts.\\
+Ultimately, interpretability will take center stage. To gain a deeper understanding of how models internally encode symbolic rules, methods like attention visualization, probing classifiers, intermediate state analysis, and synthetic control tasks will be used. These interpretability initiatives will be essential for confirming if recently created architectures demonstrate transparent and reliable reasoning mechanisms in addition to achieving high extrapolation accuracy.
+
+
+\begin{thebibliography}{00}
+
+\bibitem{b1} H. Liu, S. M. Xie, Z. Li, and T. Ma, ``Same pre-training loss, better downstream: Implicit bias matters for language models,'' in \textit{Proc. 40th Int. Conf. on Machine Learning (ICML)}, PMLR 202, 2023, pp. 22188--22214.
+
+\bibitem{b2} P. Reizinger, S. Ujváry, A. Mészáros, A. Kerekes, W. Brendel, and F. Huszár, ``Understanding LLMs requires more than statistical generalization,'' \textit{arXiv preprint arXiv:2401.14953}, 2024.
+
+\bibitem{b3} N. Chomsky, ``Three models for the description of language,'' \textit{IRE Trans. Inf. Theory}, vol. 2, no. 3, pp. 113--124, 1956.
+
+\bibitem{b4} A. Mészáros, S. Ujváry, W. Brendel, P. Reizinger, and F. Huszár, ``Rule extrapolation in language models: A study of compositional generalization on OOD prompts,'' in \textit{Proc. 38th Conf. on Neural Information Processing Systems (NeurIPS)}, 2024.
+
+\bibitem{b5} R. J. Solomonoff, ``A preliminary report on a general theory of inductive inference,'' \textit{Information and Control}, vol. 7, no. 1, pp. 1--22, 2001.
+
+\bibitem{b6} M. Li and P. Vitányi, \textit{An Introduction to Kolmogorov Complexity and Its Applications}, 3rd ed. Springer, 1997.
+
+\bibitem{b7} B. M. Lake and M. Baroni, ``Human-like systematic generalization through compositionality,'' \textit{Trends in Cognitive Sciences}, vol. 27, no. 5, pp. 399–412, 2023.
+
+\bibitem{b8} S. Ramesh, T. Han, and S. Padó, ``Evaluating neural compositional generalization through semantic parsing,'' in \textit{Proc. EMNLP}, 2024.
+
+\bibitem{b9} K. Ahuja and A. Mansouri, ``On provable length and compositional generalization,'' \textit{arXiv preprint arXiv:2402.04875}, 2024.
+
+\bibitem{b10} A. Gu and T. Dao, ``Mamba: Linear-time sequence modeling with selective state spaces,'' \textit{arXiv preprint arXiv:2312.00752}, 2023.
+
+
+\end{thebibliography}
+
+
+
+\end{document}

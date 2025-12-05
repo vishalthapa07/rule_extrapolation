@@ -24,6 +24,9 @@ from rule_extrapolation.dataset import GrammarDataset
 class GrammarDataModule(pl.LightningDataModule):
     """
     DataModule for sequence data coming from an underlying PCFG grammar.
+    
+    Paper Section 6 (Model Improvements): "Doubling the number of data workers 
+    from 4 to 8, resulted in 2× faster data loading"
     """
 
     def __init__(
@@ -33,9 +36,9 @@ class GrammarDataModule(pl.LightningDataModule):
         num_test: int = 1024,
         max_length: int = 32,
         all_sequences: bool = True,
-        batch_size: int = 64,
+        batch_size: int = 64,  # Paper Section 3.4: batch size 64 (baseline)
         grammar: str = "aNbN",
-        max_num_workers: int = 4,
+        max_num_workers: int = 8,  # Paper Section 6: "8 workers" for "2× faster data loading"
     ):
         """
 

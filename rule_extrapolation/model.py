@@ -126,6 +126,9 @@ class TransformerDecoder(nn.Module):
         # Src size must be (batch_size, src sequence length)
         # Tgt size must be (batch_size, tgt sequence length)
 
+        # Ensure src is on the same device as the embedding layer
+        src = src.to(self.embedding.weight.device)
+        
         # Embedding + positional encoding - Out size = (batch_size, sequence length, dim_model)
         src = self.embedding(src) * math.sqrt(self.dim_model)
         src = self.positional_encoder(src)

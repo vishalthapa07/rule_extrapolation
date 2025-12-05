@@ -22,39 +22,44 @@ Install dependencies:
 
 Training
 
-Basic run with Transformer:
+Main grammar (aNbNcN - context-sensitive):
+
+Train Transformer on aNbNcN grammar:
+
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --data.grammar=aNbNcN
+
+The config file already has aNbNcN set as default, so you can also just run:
 
     python -m rule_extrapolation.cli fit --config configs/config.yaml
 
-For LSTM:
+For LSTM on aNbNcN:
 
-    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/lstm.yaml
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/lstm.yaml --data.grammar=aNbNcN
 
-For xLSTM:
+For xLSTM on aNbNcN:
 
-    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/xlstm.yaml
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/xlstm.yaml --data.grammar=aNbNcN
 
-For Mamba:
+For Mamba on aNbNcN:
 
-    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/mamba.yaml
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/mamba.yaml --data.grammar=aNbNcN
 
-For Linear baseline:
+For Linear baseline on aNbNcN:
 
-    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/linear.yaml
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --config configs/linear.yaml --data.grammar=aNbNcN
 
 
-Grammars
+Other Grammars
 
-You can change the grammar in the config file or pass it via command line:
+You can change the grammar by passing it via command line:
 
 aNbN - equal a's and b's, a's first (context-free)
-aNbNcN - equal a's, b's, c's in order (context-sensitive, L5)
 baN - starts with b, even number of a's (regular)
 parentheses_and_brackets - matched () and [] (Dyck language)
 
-Example with aNbNcN grammar:
+Example with aNbN grammar:
 
-    python -m rule_extrapolation.cli fit --config configs/config.yaml --data.grammar=aNbNcN
+    python -m rule_extrapolation.cli fit --config configs/config.yaml --data.grammar=aNbN
 
 
 GPU

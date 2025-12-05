@@ -22,7 +22,7 @@ Install dependencies:
 
 Data
 
-Sample datasets are provided in the data_set folder for review, but the actual training data is generated on the fly during training.
+Sample datasets are provided in the data_set folder for review. There are 12 sample datasets (one for each grammar) with 2000 samples each. The actual training data is generated on the fly during training.
 
 
 Training
@@ -56,11 +56,25 @@ For Linear baseline on aNbNcN:
 
 Other Grammars
 
-You can change the grammar by passing it via command line:
+You can change the grammar by passing it via command line. Available grammars:
 
-aNbN - equal a's and b's, a's first (context-free)
-baN - starts with b, even number of a's (regular)
-parentheses_and_brackets - matched () and [] (Dyck language)
+Regular grammars:
+- baN - starts with b, even number of a's
+- bbaN - b's before a's, even number of a's
+
+Context-free grammars:
+- aNbN - equal a's and b's, a's first
+- abN - equal a's and b's (any order)
+- aNbM - a's before b's (any counts)
+- aNbNaN - twice as many a's as b's, a's-b's-a's pattern
+- brackets - matched brackets []
+- parentheses - matched parentheses ()
+
+Context-sensitive grammars:
+- aNbNcN - equal a's, b's, and c's, a's-b's-c's order
+- parentheses_and_brackets - matched () and [] (nested)
+- separated_parentheses_and_brackets - matched () and [] (separated)
+- not_nested_parentheses_and_brackets - matched () and [] (not nested)
 
 Example with aNbN grammar:
 

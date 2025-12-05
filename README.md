@@ -11,8 +11,13 @@ Setup
 
 Create a virtual environment and activate it:
 
+**On macOS/Linux:**
     python3 -m venv .venv
     source .venv/bin/activate
+
+**On Windows:**
+    python -m venv .venv
+    .venv\Scripts\activate
 
 Install dependencies:
 
@@ -83,8 +88,13 @@ Example with aNbN grammar:
 
 GPU
 
-For Mac with Apple Silicon, set accelerator to mps in config.yaml under trainer section.
-For NVIDIA GPUs, set accelerator to gpu.
+- **Mac with Apple Silicon**: Set `accelerator: mps` in config.yaml under trainer section
+- **Windows/Linux with NVIDIA GPU**: Set `accelerator: gpu` (or `cuda`) in config.yaml
+- **CPU only**: Set `accelerator: cpu` in config.yaml (default for most configs)
+
+**Note**: The main `configs/config.yaml` defaults to `mps` for macOS. For Windows, either:
+- Use one of the other config files (most use `cpu`), or
+- Override via command line: `--trainer.accelerator=cpu` or `--trainer.accelerator=gpu`
 
 
 Evaluation
@@ -119,9 +129,13 @@ Troubleshooting
 
 If you get "No module named pytorch_lightning", run pip install -r requirements.txt
 
-If training is slow, enable GPU in config (accelerator: mps or gpu) or reduce max_pred_length.
+If training is slow, enable GPU in config (accelerator: mps, gpu, or cuda) or reduce max_pred_length.
 
 If you run out of memory, lower batch_size or dim_model.
+
+**Windows-specific notes:**
+- Shell scripts (`.sh` files) won't work on Windows. Use the Python scripts directly instead (e.g., `python train_all_models.py`)
+- All Python code is cross-platform compatible and uses `os.path.join()` for path handling
 
 
 Citation

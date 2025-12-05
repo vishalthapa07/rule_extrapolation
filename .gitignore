@@ -158,23 +158,9 @@ evaluation_*.txt
 *_results.txt
 L5_all_models_results*.txt
 all_models_results.txt
-training_results_summary.md
+*.md
 
-# Documentation files (auto-generated or unnecessary)
-ACCURACY_IMPROVEMENT_TIPS.md
-ALL_MODELS_TRAINING.md
-CODE_FLOW_EXAMPLE.md
-CURRENT_MODEL_ARCHITECTURES.md
-FINAL_RESULTS.md
-FIXES_APPLIED.md
-HOW_IT_WORKS.md
-L5_TRAINING_STATUS.md
-MODEL_ARCHITECTURES.md
-QUICK_START.md
-README_MODELS.md
-RUN_ALL_MODELS.md
-SETUP_MODELS.md
-TRAINING_STATUS.md
+
 COMMANDS.txt
 
 # Result and output files

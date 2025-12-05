@@ -324,7 +324,6 @@ class LightningGrammarModule(pl.LightningModule):
                 mode='min',
                 factor=self.hparams.lr_scheduler_factor,
                 patience=self.hparams.lr_scheduler_patience,
-                verbose=False,
             )
             return {
                 "optimizer": optimizer,
@@ -1095,7 +1094,11 @@ class LightningGrammarModule(pl.LightningModule):
             # Concatenate previous input with predicted best word
             prompt = torch.cat((prompt, next_items), dim=1)
             # save if model predicts end of sentence
-            eos_token_val = EOS_token.item() if isinstance(EOS_token, torch.Tensor) else EOS_token
+            # Ensure EOS_token is on the same device for comparison
+            if isinstance(EOS_token, torch.Tensor):
+                eos_token_val = EOS_token.to(self.device)
+            else:
+                eos_token_val = torch.tensor(EOS_token, device=self.device)
             finished = finished | (next_items.view(-1) == eos_token_val)
             # Stop if model predicts end of sentence
             if torch.all(finished):

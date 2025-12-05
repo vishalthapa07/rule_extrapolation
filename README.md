@@ -20,6 +20,11 @@ Install dependencies:
     pip install -e .
 
 
+Data
+
+Sample datasets are provided in the data_set folder for review, but the actual training data is generated on the fly during training.
+
+
 Training
 
 Main grammar (aNbNcN - context-sensitive):
